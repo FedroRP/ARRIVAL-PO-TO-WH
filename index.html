@@ -56,7 +56,7 @@
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingArticle, setEditingArticle] = useState(null);
             
-            // State Form yang diperluas
+            // State Form untuk input artikel dan log kedatangan
             const [formData, setFormData] = useState({ 
                 noPo: '', 
                 brand: '', 
@@ -123,16 +123,17 @@
             };
 
             const handleSubmit = () => {
+                // Validasi Input Wajib
                 if (!formData.noPo || !formData.brand || !formData.artikel) {
                     alert("Mohon lengkapi No. PO, Brand, dan Artikel.");
                     return;
                 }
                 
-                // Cek No. PO Unik (Hanya jika tambah baru)
+                // Cek No. PO Unik (Hanya untuk artikel baru)
                 if (!editingArticle) {
-                    const isDuplicate = articles.some(art => art.noPo === formData.noPo);
+                    const isDuplicate = articles.some(art => art.noPo.trim().toUpperCase() === formData.noPo.trim().toUpperCase());
                     if (isDuplicate) {
-                        alert(`No. PO ${formData.noPo} sudah terdaftar! Gunakan No. PO yang berbeda.`);
+                        alert(`No. PO "${formData.noPo}" sudah ada dalam sistem. Harap gunakan nomor yang unik.`);
                         return;
                     }
                 }
@@ -146,20 +147,34 @@
                     setArticles(articles.map(art => {
                         if (art.id === editingArticle) {
                             const updatedArrivals = { ...art.arrivals };
-                            // Timpa data kedatangan pada tanggal yang dipilih
-                            updatedArrivals[formData.inputDate] = arrivalData;
-                            return { ...art, ...formData, arrivals: updatedArrivals };
+                            // Menambahkan atau mengupdate data kedatangan pada tanggal yang dipilih
+                            // Jika sudah ada data di tanggal tersebut, kita tambahkan jumlahnya (akumulasi)
+                            const existingDateData = updatedArrivals[formData.inputDate] || { online: 0, offline: 0 };
+                            updatedArrivals[formData.inputDate] = {
+                                online: existingDateData.online + arrivalData.online,
+                                offline: existingDateData.offline + arrivalData.offline
+                            };
+                            
+                            return { 
+                                ...art, 
+                                brand: formData.brand,
+                                artikel: formData.artikel,
+                                color: formData.color,
+                                size: formData.size,
+                                qtyPo: formData.qtyPo,
+                                arrivals: updatedArrivals 
+                            };
                         }
                         return art;
                     }));
                 } else {
                     setArticles([...articles, { 
                         id: Date.now().toString(),
-                        noPo: formData.noPo,
-                        brand: formData.brand,
-                        artikel: formData.artikel,
-                        color: formData.color,
-                        size: formData.size,
+                        noPo: formData.noPo.trim().toUpperCase(),
+                        brand: formData.brand.trim().toUpperCase(),
+                        artikel: formData.artikel.trim().toUpperCase(),
+                        color: formData.color.trim().toUpperCase(),
+                        size: formData.size.trim().toUpperCase(),
                         qtyPo: formData.qtyPo,
                         arrivals: { [formData.inputDate]: arrivalData } 
                     }]);
@@ -266,11 +281,11 @@
                                                             </button>
                                                         </div>
                                                     </td>
-                                                    <td className="border border-slate-200 p-3 font-mono font-bold text-slate-600">{art.noPo}</td>
+                                                    <td className="border border-slate-200 p-3 font-mono font-bold text-slate-600 uppercase">{art.noPo}</td>
                                                     <td className="border border-slate-200 p-3 font-bold uppercase text-slate-700">{art.brand}</td>
-                                                    <td className="border border-slate-200 p-3 font-semibold text-slate-700">{art.artikel}</td>
-                                                    <td className="border border-slate-200 p-3 text-slate-500 font-medium">{art.color}</td>
-                                                    <td className="border border-slate-200 p-3 text-center font-mono font-bold text-slate-700">{art.size}</td>
+                                                    <td className="border border-slate-200 p-3 font-semibold text-slate-700 uppercase">{art.artikel}</td>
+                                                    <td className="border border-slate-200 p-3 text-slate-500 font-medium uppercase">{art.color}</td>
+                                                    <td className="border border-slate-200 p-3 text-center font-mono font-bold text-slate-700 uppercase">{art.size}</td>
                                                     <td className="border border-slate-200 p-3 text-center font-bold text-slate-800">{art.qtyPo.toLocaleString()}</td>
                                                     
                                                     <td className={`border border-slate-200 p-3 text-center font-black text-[13px] ${isCompleted ? 'text-emerald-700 bg-emerald-50' : 'text-indigo-800 bg-indigo-50/50'}`}>
@@ -282,11 +297,12 @@
                                                         const daily = art.arrivals[dateKey] || { online: 0, offline: 0 };
                                                         return (
                                                             <React.Fragment key={`${art.id}-${dateKey}`}>
+                                                                {/* Sel ini terkunci, hanya bisa berubah via Modal */}
                                                                 <td className="border border-slate-200 p-2 text-center font-bold text-indigo-700 bg-indigo-50/20">
-                                                                    {daily.online || '-'}
+                                                                    {daily.online > 0 ? daily.online : '-'}
                                                                 </td>
                                                                 <td className="border border-slate-200 p-2 text-center font-bold text-amber-700 bg-amber-50/20">
-                                                                    {daily.offline || '-'}
+                                                                    {daily.offline > 0 ? daily.offline : '-'}
                                                                 </td>
                                                             </React.Fragment>
                                                         );
@@ -301,7 +317,7 @@
 
                         <div className="mt-6 flex flex-wrap items-center justify-end gap-6 text-[10px] font-black uppercase tracking-widest text-slate-400">
                             <div className="flex items-center gap-2 italic">
-                                <Icon name="lock" size={12} /> Input hanya melalui tombol Tambah/Edit
+                                <Icon name="lock" size={12} /> Data tabel terkunci & otomatis terisi dari form
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="w-3.5 h-3.5 rounded bg-indigo-500 shadow-sm shadow-indigo-200"></span> Online
@@ -319,9 +335,9 @@
                                     <div>
                                         <h3 className="text-xl font-black flex items-center gap-3 uppercase tracking-tighter">
                                             <Icon name={editingArticle ? "pencil" : "plus-circle"} size={24} /> 
-                                            {editingArticle ? "Update Kedatangan" : "Tambah Artikel Baru"}
+                                            {editingArticle ? "Update Data & Kedatangan" : "Tambah Artikel Baru"}
                                         </h3>
-                                        <p className="text-indigo-100 text-[10px] mt-1 font-medium uppercase tracking-widest">Detail Produk & Log Kedatangan</p>
+                                        <p className="text-indigo-100 text-[10px] mt-1 font-medium uppercase tracking-widest">Lengkapi Detail Artikel dan Jumlah Kedatangan</p>
                                     </div>
                                     <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-indigo-500 rounded-full transition-colors">
                                         <Icon name="x" size={20} />
@@ -334,11 +350,11 @@
                                         <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] border-b pb-2">Informasi Produk</h4>
                                         <div className="space-y-3 text-xs font-bold text-slate-500">
                                             <div className="space-y-1">
-                                                <label className="uppercase ml-1 tracking-wider">No. PO (Unique)</label>
+                                                <label className="uppercase ml-1 tracking-wider">No. PO (Wajib Unik)</label>
                                                 <input 
                                                     disabled={editingArticle}
                                                     placeholder="Contoh: PO-2026-001"
-                                                    className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all ${editingArticle ? 'opacity-50 cursor-not-allowed' : ''}`} 
+                                                    className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all ${editingArticle ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`} 
                                                     value={formData.noPo} 
                                                     onChange={e => setFormData({...formData, noPo: e.target.value.toUpperCase()})} 
                                                 />
@@ -393,7 +409,7 @@
                                         </div>
                                     </div>
 
-                                    {/* Kolom Kanan: Input Kedatangan */}
+                                    {/* Kolom Kanan: Input Kedatangan (ON/OFF & Tanggal) */}
                                     <div className="bg-slate-50 p-4 rounded-2xl space-y-4 border border-slate-200">
                                         <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] border-b border-slate-200 pb-2">Log Kedatangan</h4>
                                         <div className="space-y-4 text-xs font-bold text-slate-500">
@@ -401,13 +417,13 @@
                                                 <label className="uppercase ml-1 tracking-wider">Tanggal Kedatangan</label>
                                                 <input 
                                                     type="date"
-                                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold transition-all" 
+                                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold transition-all text-slate-700" 
                                                     value={formData.inputDate}
                                                     onChange={e => setFormData({...formData, inputDate: e.target.value})}
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="uppercase ml-1 tracking-wider text-indigo-600">Kedatangan Online</label>
+                                                <label className="uppercase ml-1 tracking-wider text-indigo-600">Jumlah ON (Online)</label>
                                                 <input 
                                                     type="number" 
                                                     placeholder="Qty Unit"
@@ -417,7 +433,7 @@
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="uppercase ml-1 tracking-wider text-amber-600">Kedatangan Offline</label>
+                                                <label className="uppercase ml-1 tracking-wider text-amber-600">Jumlah OFF (Offline)</label>
                                                 <input 
                                                     type="number" 
                                                     placeholder="Qty Unit"
@@ -426,10 +442,10 @@
                                                     onChange={e => setFormData({...formData, inputOffline: parseInt(e.target.value) || 0})} 
                                                 />
                                             </div>
-                                            <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 flex items-start gap-3 mt-4">
-                                                <Icon name="info" size={16} className="text-indigo-600 mt-0.5" />
-                                                <p className="text-[10px] leading-relaxed text-indigo-800 italic">
-                                                    Data kedatangan akan otomatis masuk ke kolom tanggal <b>{new Date(formData.inputDate).getDate()} {new Date(formData.inputDate).toLocaleString('id-ID', {month: 'short'})}</b> di tabel utama.
+                                            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm flex items-start gap-3 mt-4">
+                                                <Icon name="check-circle" size={16} className="text-emerald-500 mt-0.5" />
+                                                <p className="text-[10px] leading-relaxed text-slate-600 italic">
+                                                    Data ini akan otomatis masuk ke kolom tanggal <b>{new Date(formData.inputDate).getDate()}</b> bulan <b>{new Date(formData.inputDate).toLocaleString('id-ID', {month: 'long'})}</b>.
                                                 </p>
                                             </div>
                                         </div>
@@ -441,13 +457,13 @@
                                         onClick={() => setIsModalOpen(false)} 
                                         className="flex-1 p-4 bg-white border border-slate-200 rounded-2xl font-bold text-slate-500 hover:bg-slate-200 transition-colors uppercase tracking-widest text-[10px]"
                                     >
-                                        Tutup
+                                        Batal
                                     </button>
                                     <button 
                                         onClick={handleSubmit} 
                                         className="flex-1 p-4 bg-indigo-600 text-white rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all uppercase tracking-widest text-[10px]"
                                     >
-                                        {editingArticle ? "Update & Simpan" : "Simpan Artikel"}
+                                        {editingArticle ? "Update & Tambah Log" : "Simpan Artikel"}
                                     </button>
                                 </div>
                             </div>
