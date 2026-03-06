@@ -74,7 +74,6 @@
                 targetPo: '', date: '2026-03-01', online: 0, offline: 0
             });
 
-            // Get Unique values for Dropdowns
             const uniqueBrands = useMemo(() => [...new Set(articles.map(a => a.brand))].sort(), [articles]);
             const uniquePos = useMemo(() => [...new Set(articles.map(a => a.noPo))].sort(), [articles]);
             const uniqueArtikels = useMemo(() => [...new Set(articles.map(a => a.artikel))].sort(), [articles]);
@@ -94,7 +93,6 @@
                 return days;
             }, [currentDate]);
 
-            // Logic Filter
             const filteredArticles = useMemo(() => {
                 return articles.filter(art => {
                     const matchBrand = filterBrand === '' || art.brand === filterBrand;
@@ -117,12 +115,7 @@
                     color: formArticle.color.toUpperCase(),
                     size: formArticle.size.toUpperCase(),
                     qtyPo: formArticle.qtyPo,
-                    arrivals: {
-                        [formArticle.initDate]: {
-                            online: parseInt(formArticle.initOnline) || 0,
-                            offline: parseInt(formArticle.initOffline) || 0
-                        }
-                    }
+                    arrivals: {}
                 };
                 setArticles([...articles, newEntry]);
                 setIsModalOpen(false);
@@ -160,13 +153,21 @@
                 setFormArrival({ ...formArrival, online: 0, offline: 0 });
             };
 
-            const calculateTotal = (arrivals) => Object.values(arrivals).reduce((t, d) => t + d.online + d.offline, 0);
+            const calculateMetrics = (arrivals) => {
+                let online = 0;
+                let offline = 0;
+                Object.values(arrivals).forEach(d => {
+                    online += (d.online || 0);
+                    offline += (d.offline || 0);
+                });
+                return { online, offline, total: online + offline };
+            };
 
             const handleExportCSV = () => {
                 if (articles.length === 0) return;
                 let csvContent = "No. PO,Brand,Artikel,Size,Qty PO,Total Arrival\n";
                 articles.forEach(art => {
-                    csvContent += `"${art.noPo}","${art.brand}","${art.artikel}","${art.size}",${art.qtyPo},${calculateTotal(art.arrivals)}\n`;
+                    csvContent += `"${art.noPo}","${art.brand}","${art.artikel}","${art.size}",${art.qtyPo},${calculateMetrics(art.arrivals).total}\n`;
                 });
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement("a");
@@ -185,7 +186,7 @@
                 <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
                     <div className="max-w-[98vw] mx-auto">
                         
-                        {/* Header & Main Controls */}
+                        {/* Header Section */}
                         <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             <div className="flex items-center gap-4">
                                 <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg text-white">
@@ -198,7 +199,6 @@
                             </div>
                             
                             <div className="flex flex-wrap items-center gap-3">
-                                {/* Navigasi View */}
                                 <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
                                     <button 
                                         onClick={() => setView('dashboard')}
@@ -214,7 +214,6 @@
                                     </button>
                                 </div>
 
-                                {/* Tombol Aksi Utama */}
                                 <button onClick={handleExportCSV} className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2.5 rounded-xl font-black hover:bg-emerald-100 transition-all text-[10px] uppercase tracking-widest">
                                     <Icon name="download" size={14} /> Export
                                 </button>
@@ -273,101 +272,128 @@
                             )}
                         </div>
 
-                        {/* Calendar Month Controls */}
-                        {view === 'dashboard' && (
-                            <div className="mb-4 flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
-                                <div className="flex items-center overflow-hidden">
-                                    <button onClick={prevMonth} className="p-2 hover:bg-slate-50 rounded-lg"><Icon name="chevron-left" /></button>
-                                    <div className="px-6 font-black text-slate-700 min-w-[180px] text-center uppercase text-xs tracking-[0.2em]">
-                                        {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
-                                    </div>
-                                    <button onClick={nextMonth} className="p-2 hover:bg-slate-50 rounded-lg"><Icon name="chevron-right" /></button>
-                                </div>
-                                <div className="flex gap-4 pr-4">
-                                    <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-600"></div><span className="text-[9px] font-black uppercase text-indigo-700">Online</span></div>
-                                    <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-amber-600"></div><span className="text-[9px] font-black uppercase text-amber-700">Offline</span></div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* TABLE VIEW */}
+                        {/* TABLE SECTION */}
                         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-fade-in">
                             <div className="overflow-x-auto max-h-[65vh]">
-                                <table className="w-full border-collapse text-[10px]">
-                                    <thead className="sticky top-0 z-30 shadow-sm">
-                                        <tr className="bg-slate-800 text-white">
-                                            <th rowSpan="3" className="w-20 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-900 sticky top-0">Aksi</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 text-center uppercase font-bold sticky-po bg-slate-800">No. PO</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Brand</th>
-                                            <th rowSpan="3" className="w-40 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Artikel</th>
-                                            <th rowSpan="3" className="w-16 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Size</th>
-                                            <th rowSpan="3" className="w-20 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Qty PO</th>
-                                            <th rowSpan="3" className="w-24 border border-slate-700 p-3 text-center uppercase font-bold bg-emerald-600">Total</th>
-                                            <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center font-bold bg-slate-900 tracking-widest uppercase italic">Monitoring Kedatangan</th>
-                                        </tr>
-                                        <tr className="bg-slate-50 text-slate-700 font-black">
-                                            {daysInMonth.map(date => (
-                                                <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-1 text-center min-w-[70px]">
-                                                    {date.getDate()}
+                                {view === 'dashboard' ? (
+                                    <table className="w-full border-collapse text-[10px]">
+                                        <thead className="sticky top-0 z-30">
+                                            <tr className="bg-slate-800 text-white">
+                                                <th rowSpan="3" className="w-20 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-900 sticky top-0">Aksi</th>
+                                                <th rowSpan="3" className="w-32 border border-slate-700 p-3 text-center uppercase font-bold sticky-po bg-slate-800">No. PO</th>
+                                                <th rowSpan="3" className="w-32 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Brand</th>
+                                                <th rowSpan="3" className="w-40 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Artikel</th>
+                                                <th rowSpan="3" className="w-16 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Size</th>
+                                                <th rowSpan="3" className="w-20 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Qty PO</th>
+                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center font-bold bg-slate-900 tracking-widest uppercase italic">
+                                                    Monitoring {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
                                                 </th>
-                                            ))}
-                                        </tr>
-                                        <tr className="bg-slate-100 uppercase font-black">
-                                            {daysInMonth.map(date => (
-                                                <React.Fragment key={`h-${date.toISOString()}`}>
-                                                    <th className="border border-slate-200 p-1 text-center text-indigo-600">ON</th>
-                                                    <th className="border border-slate-200 p-1 text-center text-amber-600">OFF</th>
-                                                </React.Fragment>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredArticles.map((art) => (
-                                            <tr key={art.id} className="table-row-hover transition-colors">
-                                                <td className="border border-slate-200 p-2 text-center">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <button onClick={() => { setEditData(art); setIsEditModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Icon name="edit-3" size={13}/></button>
-                                                        <button onClick={() => handleDeleteArticle(art.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Icon name="trash-2" size={13}/></button>
-                                                    </div>
-                                                </td>
-                                                <td className="border border-slate-200 p-3 font-bold text-slate-500 text-center sticky-po">{art.noPo}</td>
-                                                <td className="border border-slate-200 p-3 font-bold uppercase">{art.brand}</td>
-                                                <td className="border border-slate-200 p-3 font-medium uppercase">{art.artikel}</td>
-                                                <td className="border border-slate-200 p-3 text-center font-bold">{art.size}</td>
-                                                <td className="border border-slate-200 p-3 text-center font-bold">{art.qtyPo}</td>
-                                                <td className="border border-slate-200 p-3 text-center font-black bg-emerald-50 text-emerald-700">
-                                                    {calculateTotal(art.arrivals)}
-                                                </td>
-                                                {daysInMonth.map(date => {
-                                                    const k = date.toISOString().split('T')[0];
-                                                    const d = art.arrivals[k] || { online: 0, offline: 0 };
-                                                    return (
-                                                        <React.Fragment key={`${art.id}-${k}`}>
-                                                            <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || '-'}</td>
-                                                            <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || '-'}</td>
-                                                        </React.Fragment>
-                                                    );
-                                                })}
                                             </tr>
-                                        ))}
-                                        {filteredArticles.length === 0 && (
-                                            <tr>
-                                                <td colSpan={7 + daysInMonth.length * 2} className="p-24 text-center bg-slate-50">
-                                                    <div className="flex flex-col items-center gap-4 opacity-30">
-                                                        <Icon name="package-search" size={64} />
-                                                        <span className="font-black uppercase tracking-[0.5em] text-xs">Data Tidak Ditemukan</span>
-                                                        <button onClick={resetFilters} className="text-indigo-600 underline font-bold text-[11px] tracking-widest uppercase mt-2">Tampilkan Semua</button>
-                                                    </div>
-                                                </td>
+                                            <tr className="bg-slate-50 text-slate-700 font-black">
+                                                {daysInMonth.map(date => (
+                                                    <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-1 text-center min-w-[70px]">
+                                                        {date.getDate()}
+                                                    </th>
+                                                ))}
                                             </tr>
-                                        )}
-                                    </tbody>
-                                </table>
+                                            <tr className="bg-slate-100 uppercase font-black text-[9px]">
+                                                {daysInMonth.map(date => (
+                                                    <React.Fragment key={`h-${date.toISOString()}`}>
+                                                        <th className="border border-slate-200 p-1 text-center text-indigo-600">ON</th>
+                                                        <th className="border border-slate-200 p-1 text-center text-amber-600">OFF</th>
+                                                    </React.Fragment>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredArticles.map((art) => (
+                                                <tr key={art.id} className="table-row-hover transition-colors">
+                                                    <td className="border border-slate-200 p-2 text-center">
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            <button onClick={() => { setEditData(art); setIsEditModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Icon name="edit-3" size={13}/></button>
+                                                            <button onClick={() => handleDeleteArticle(art.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Icon name="trash-2" size={13}/></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="border border-slate-200 p-3 font-bold text-slate-500 text-center sticky-po">{art.noPo}</td>
+                                                    <td className="border border-slate-200 p-3 font-bold uppercase">{art.brand}</td>
+                                                    <td className="border border-slate-200 p-3 font-medium uppercase">{art.artikel}</td>
+                                                    <td className="border border-slate-200 p-3 text-center font-bold">{art.size}</td>
+                                                    <td className="border border-slate-200 p-3 text-center font-bold">{art.qtyPo}</td>
+                                                    {daysInMonth.map(date => {
+                                                        const k = date.toISOString().split('T')[0];
+                                                        const d = art.arrivals[k] || { online: 0, offline: 0 };
+                                                        return (
+                                                            <React.Fragment key={`${art.id}-${k}`}>
+                                                                <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || '-'}</td>
+                                                                <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || '-'}</td>
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    /* RECAP VIEW */
+                                    <table className="w-full border-collapse text-[10px]">
+                                        <thead className="sticky top-0 z-30">
+                                            <tr className="bg-slate-800 text-white">
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold sticky-po bg-slate-900">No. PO</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold">Brand</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold">Artikel</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold">Size</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold bg-slate-700">Qty Target</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold bg-indigo-900">Total Online</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold bg-amber-900">Total Offline</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold bg-emerald-800">Grand Total</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold bg-rose-900">Sisa PO</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase font-bold bg-slate-900">% Capaian</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredArticles.map((art) => {
+                                                const metrics = calculateMetrics(art.arrivals);
+                                                const balance = art.qtyPo - metrics.total;
+                                                const percent = art.qtyPo > 0 ? ((metrics.total / art.qtyPo) * 100).toFixed(1) : 0;
+                                                return (
+                                                    <tr key={art.id} className="table-row-hover transition-colors font-bold">
+                                                        <td className="border border-slate-200 p-4 text-center sticky-po text-slate-500">{art.noPo}</td>
+                                                        <td className="border border-slate-200 p-4 uppercase">{art.brand}</td>
+                                                        <td className="border border-slate-200 p-4 uppercase font-medium">{art.artikel}</td>
+                                                        <td className="border border-slate-200 p-4 text-center">{art.size}</td>
+                                                        <td className="border border-slate-200 p-4 text-center bg-slate-50">{art.qtyPo}</td>
+                                                        <td className="border border-slate-200 p-4 text-center text-indigo-700">{metrics.online}</td>
+                                                        <td className="border border-slate-200 p-4 text-center text-amber-700">{metrics.offline}</td>
+                                                        <td className="border border-slate-200 p-4 text-center bg-emerald-50 text-emerald-800">{metrics.total}</td>
+                                                        <td className={`border border-slate-200 p-4 text-center ${balance > 0 ? 'text-rose-600 bg-rose-50' : 'text-emerald-600'}`}>
+                                                            {balance}
+                                                        </td>
+                                                        <td className="border border-slate-200 p-4 text-center">
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                                    <div className="h-full bg-indigo-600 rounded-full" style={{width: `${Math.min(percent, 100)}%`}}></div>
+                                                                </div>
+                                                                <span>{percent}%</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                )}
+
+                                {filteredArticles.length === 0 && (
+                                    <div className="p-24 text-center bg-slate-50 flex flex-col items-center gap-4 opacity-30">
+                                        <Icon name="package-search" size={64} />
+                                        <span className="font-black uppercase tracking-[0.5em] text-xs">Data Tidak Ditemukan</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* MODAL: TAMBAH ARTIKEL */}
+                    {/* MODALS (STAY THE SAME AS PREVIOUS) */}
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in">
@@ -392,7 +418,6 @@
                         </div>
                     )}
 
-                    {/* MODAL: EDIT ARTIKEL */}
                     {isEditModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
@@ -414,7 +439,6 @@
                         </div>
                     )}
 
-                    {/* MODAL: INPUT ARRIVAL */}
                     {isArrivalModalOpen && (
                         <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
@@ -429,14 +453,8 @@
                                     </select>
                                     <input type="date" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[9px] font-black uppercase text-indigo-500 mb-1 ml-1 block">Online</label>
-                                            <input type="number" className="w-full p-4 bg-white border-2 border-indigo-50 rounded-2xl font-black text-indigo-600 text-center" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <label className="text-[9px] font-black uppercase text-amber-500 mb-1 ml-1 block">Offline</label>
-                                            <input type="number" className="w-full p-4 bg-white border-2 border-amber-50 rounded-2xl font-black text-amber-600 text-center" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
-                                        </div>
+                                        <input type="number" placeholder="ONLINE" className="w-full p-4 bg-white border-2 border-indigo-50 rounded-2xl font-black text-indigo-600 text-center" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
+                                        <input type="number" placeholder="OFFLINE" className="w-full p-4 bg-white border-2 border-amber-50 rounded-2xl font-black text-amber-600 text-center" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
                                     </div>
                                     <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest mt-6 shadow-lg">Simpan Kedatangan</button>
                                 </div>
