@@ -34,6 +34,7 @@
         };
 
         const App = () => {
+            const [view, setView] = useState('dashboard'); // 'dashboard' or 'recap'
             const [articles, setArticles] = useState([
                 {
                     id: '1',
@@ -52,18 +53,15 @@
             const [isEditModalOpen, setIsEditModalOpen] = useState(false);
             const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
             
-            // State untuk Form Tambah
             const [formArticle, setFormArticle] = useState({ 
                 noPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0,
                 initDate: '2026-03-01', initOnline: 0, initOffline: 0
             });
 
-            // State untuk Form Edit
             const [editData, setEditData] = useState({
                 id: '', noPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0
             });
 
-            // State untuk Form Arrival
             const [formArrival, setFormArrival] = useState({
                 targetPo: '', date: '2026-03-01', online: 0, offline: 0
             });
@@ -82,6 +80,25 @@
                 }
                 return days;
             }, [currentDate]);
+
+            // Derivasi Data untuk Rekap (Tampilan List)
+            const recapData = useMemo(() => {
+                const list = [];
+                articles.forEach(art => {
+                    Object.keys(art.arrivals).forEach(dateStr => {
+                        const data = art.arrivals[dateStr];
+                        if (data.online > 0 || data.offline > 0) {
+                            list.push({
+                                ...art,
+                                arrivalDate: dateStr,
+                                qtyOnline: data.online,
+                                qtyOffline: data.offline
+                            });
+                        }
+                    });
+                });
+                return list.sort((a, b) => new Date(b.arrivalDate) - new Date(a.arrivalDate));
+            }, [articles]);
 
             const handleSaveArticle = () => {
                 if (!formArticle.noPo || !formArticle.brand || !formArticle.artikel) {
@@ -141,101 +158,202 @@
 
             const calculateTotal = (arrivals) => Object.values(arrivals).reduce((t, d) => t + d.online + d.offline, 0);
 
+            const handleExportCSV = () => {
+                if (articles.length === 0) return;
+                let csvContent = "No. PO,Brand,Artikel,Size,Qty PO,Total Arrival,";
+                daysInMonth.forEach(day => {
+                    const d = day.getDate();
+                    csvContent += `${d} (ON),${d} (OFF),`;
+                });
+                csvContent += "\n";
+                articles.forEach(art => {
+                    const total = calculateTotal(art.arrivals);
+                    csvContent += `"${art.noPo}","${art.brand}","${art.artikel}","${art.size}",${art.qtyPo},${total},`;
+                    daysInMonth.forEach(day => {
+                        const k = day.toISOString().split('T')[0];
+                        const d = art.arrivals[k] || { online: 0, offline: 0 };
+                        csvContent += `${d.online || 0},${d.offline || 0},`;
+                    });
+                    csvContent += "\n";
+                });
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", `Inventory_Report_2026.csv`);
+                link.click();
+            };
+
             return (
                 <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
                     <div className="max-w-[98vw] mx-auto">
                         
+                        {/* Header Section */}
                         <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             <div className="flex items-center gap-4">
                                 <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg text-white">
                                     <Icon name="package-check" size={28} />
                                 </div>
                                 <div>
-                                    <h1 className="text-2xl font-black uppercase tracking-tight">Arrival Tracking 2026</h1>
+                                    <h1 className="text-2xl font-black uppercase tracking-tight">Inventory Tracker 2026</h1>
                                     <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em]">PT. LESTARI LOGISTIK</p>
                                 </div>
                             </div>
                             
+                            {/* Navigation Tabs */}
+                            <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+                                <button 
+                                    onClick={() => setView('dashboard')}
+                                    className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    Monitoring Kalender
+                                </button>
+                                <button 
+                                    onClick={() => setView('recap')}
+                                    className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    Rekap Kedatangan
+                                </button>
+                            </div>
+
                             <div className="flex flex-wrap items-center gap-3">
-                                <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm mr-2">
-                                    <button onClick={prevMonth} className="p-2 hover:bg-slate-50 border-r border-slate-200"><Icon name="chevron-left" /></button>
-                                    <div className="px-4 py-2 font-bold text-slate-700 min-w-[150px] text-center uppercase text-xs tracking-widest">
-                                        {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+                                {view === 'dashboard' && (
+                                    <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm mr-2">
+                                        <button onClick={prevMonth} className="p-2 hover:bg-slate-50 border-r border-slate-200"><Icon name="chevron-left" /></button>
+                                        <div className="px-4 py-2 font-bold text-slate-700 min-w-[150px] text-center uppercase text-xs tracking-widest">
+                                            {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+                                        </div>
+                                        <button onClick={nextMonth} className="p-2 hover:bg-slate-50 border-l border-slate-200"><Icon name="chevron-right" /></button>
                                     </div>
-                                    <button onClick={nextMonth} className="p-2 hover:bg-slate-50 border-l border-slate-200"><Icon name="chevron-right" /></button>
-                                </div>
+                                )}
+
+                                <button onClick={handleExportCSV} className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border-2 border-emerald-200 px-5 py-2.5 rounded-xl font-black hover:bg-emerald-100 transition-all text-[10px] uppercase tracking-widest">
+                                    <Icon name="download" size={14} /> Export CSV
+                                </button>
                                 
                                 <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-800 text-slate-800 px-5 py-2.5 rounded-xl font-black hover:bg-slate-50 transition-all text-[10px] uppercase tracking-widest">
                                     <Icon name="plus" size={14} /> Tambah Artikel
                                 </button>
                                 
                                 <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-[10px] uppercase tracking-widest">
-                                    <Icon name="truck" size={14} /> Tambah Kedatangan
+                                    <Icon name="truck" size={14} /> Input Arrival
                                 </button>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-                            <div className="overflow-x-auto max-h-[75vh]">
-                                <table className="w-full border-collapse text-[10px]">
-                                    <thead className="sticky top-0 z-30 shadow-sm">
-                                        <tr className="bg-slate-800 text-white">
-                                            <th rowSpan="3" className="w-20 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-900 sticky top-0">Aksi</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 text-center uppercase font-bold sticky-po bg-slate-800">No. PO</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Brand</th>
-                                            <th rowSpan="3" className="w-40 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Artikel</th>
-                                            <th rowSpan="3" className="w-16 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Size</th>
-                                            <th rowSpan="3" className="w-20 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Qty PO</th>
-                                            <th rowSpan="3" className="w-24 border border-slate-700 p-3 text-center uppercase font-bold bg-emerald-600">Total</th>
-                                            <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center font-bold bg-slate-900 tracking-widest uppercase italic">Monitoring Kedatangan Harian</th>
-                                        </tr>
-                                        <tr className="bg-slate-50 text-slate-700 font-black">
-                                            {daysInMonth.map(date => (
-                                                <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-1 text-center min-w-[80px]">
-                                                    {date.getDate()}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                        <tr className="bg-slate-100 uppercase font-black">
-                                            {daysInMonth.map(date => (
-                                                <React.Fragment key={`h-${date.toISOString()}`}>
-                                                    <th className="border border-slate-200 p-1 text-center text-indigo-600">ON</th>
-                                                    <th className="border border-slate-200 p-1 text-center text-amber-600">OFF</th>
-                                                </React.Fragment>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {articles.map((art) => (
-                                            <tr key={art.id} className="table-row-hover transition-colors">
-                                                <td className="border border-slate-200 p-2 text-center">
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <button onClick={() => { setEditData(art); setIsEditModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit Data Produk"><Icon name="edit-3" size={14}/></button>
-                                                        <button onClick={() => handleDeleteArticle(art.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Hapus Artikel"><Icon name="trash-2" size={14}/></button>
-                                                    </div>
-                                                </td>
-                                                <td className="border border-slate-200 p-2 font-bold text-slate-500 text-center sticky-po">{art.noPo}</td>
-                                                <td className="border border-slate-200 p-2 font-bold uppercase">{art.brand}</td>
-                                                <td className="border border-slate-200 p-2 font-medium uppercase">{art.artikel}</td>
-                                                <td className="border border-slate-200 p-2 text-center font-bold">{art.size}</td>
-                                                <td className="border border-slate-200 p-2 text-center font-bold">{art.qtyPo}</td>
-                                                <td className="border border-slate-200 p-2 text-center font-black bg-emerald-50 text-emerald-700">{calculateTotal(art.arrivals)}</td>
-                                                {daysInMonth.map(date => {
-                                                    const k = date.toISOString().split('T')[0];
-                                                    const d = art.arrivals[k] || { online: 0, offline: 0 };
-                                                    return (
-                                                        <React.Fragment key={`${art.id}-${k}`}>
-                                                            <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || '-'}</td>
-                                                            <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || '-'}</td>
-                                                        </React.Fragment>
-                                                    );
-                                                })}
+                        {/* VIEW 1: DASHBOARD MONITORING (CALENDAR STYLE) */}
+                        {view === 'dashboard' ? (
+                            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+                                <div className="overflow-x-auto max-h-[75vh]">
+                                    <table className="w-full border-collapse text-[10px]">
+                                        <thead className="sticky top-0 z-30 shadow-sm">
+                                            <tr className="bg-slate-800 text-white">
+                                                <th rowSpan="3" className="w-20 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-900 sticky top-0">Aksi</th>
+                                                <th rowSpan="3" className="w-32 border border-slate-700 p-3 text-center uppercase font-bold sticky-po bg-slate-800">No. PO</th>
+                                                <th rowSpan="3" className="w-32 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Brand</th>
+                                                <th rowSpan="3" className="w-40 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Artikel</th>
+                                                <th rowSpan="3" className="w-16 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Size</th>
+                                                <th rowSpan="3" className="w-20 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Qty PO</th>
+                                                <th rowSpan="3" className="w-24 border border-slate-700 p-3 text-center uppercase font-bold bg-emerald-600">Total</th>
+                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center font-bold bg-slate-900 tracking-widest uppercase italic">Log Kedatangan Per Tanggal</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                            <tr className="bg-slate-50 text-slate-700 font-black">
+                                                {daysInMonth.map(date => (
+                                                    <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-1 text-center min-w-[80px]">
+                                                        {date.getDate()}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                            <tr className="bg-slate-100 uppercase font-black">
+                                                {daysInMonth.map(date => (
+                                                    <React.Fragment key={`h-${date.toISOString()}`}>
+                                                        <th className="border border-slate-200 p-1 text-center text-indigo-600">ON</th>
+                                                        <th className="border border-slate-200 p-1 text-center text-amber-600">OFF</th>
+                                                    </React.Fragment>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {articles.map((art) => (
+                                                <tr key={art.id} className="table-row-hover transition-colors">
+                                                    <td className="border border-slate-200 p-2 text-center">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <button onClick={() => { setEditData(art); setIsEditModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Icon name="edit-3" size={14}/></button>
+                                                            <button onClick={() => handleDeleteArticle(art.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Icon name="trash-2" size={14}/></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="border border-slate-200 p-2 font-bold text-slate-500 text-center sticky-po">{art.noPo}</td>
+                                                    <td className="border border-slate-200 p-2 font-bold uppercase">{art.brand}</td>
+                                                    <td className="border border-slate-200 p-2 font-medium uppercase">{art.artikel}</td>
+                                                    <td className="border border-slate-200 p-2 text-center font-bold">{art.size}</td>
+                                                    <td className="border border-slate-200 p-2 text-center font-bold">{art.qtyPo}</td>
+                                                    <td className="border border-slate-200 p-2 text-center font-black bg-emerald-50 text-emerald-700">{calculateTotal(art.arrivals)}</td>
+                                                    {daysInMonth.map(date => {
+                                                        const k = date.toISOString().split('T')[0];
+                                                        const d = art.arrivals[k] || { online: 0, offline: 0 };
+                                                        return (
+                                                            <React.Fragment key={`${art.id}-${k}`}>
+                                                                <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || '-'}</td>
+                                                                <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || '-'}</td>
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            /* VIEW 2: REKAP KEDATANGAN (VERTICAL LIST) */
+                            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                                <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
+                                    <h2 className="font-black text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+                                        <Icon name="list" size={16} /> Riwayat Seluruh Kedatangan
+                                    </h2>
+                                    <span className="text-[9px] bg-slate-700 px-3 py-1 rounded-full uppercase font-bold tracking-widest">Total: {recapData.length} Transaksi</span>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse text-[10px]">
+                                        <thead>
+                                            <tr className="bg-slate-100 text-slate-600 uppercase font-black text-center">
+                                                <th className="border p-4 w-32">Tanggal</th>
+                                                <th className="border p-4 w-32">Brand</th>
+                                                <th className="border p-4 w-32">No. PO</th>
+                                                <th className="border p-4">Artikel</th>
+                                                <th className="border p-4 w-28">Color</th>
+                                                <th className="border p-4 w-20">Size</th>
+                                                <th className="border p-4 w-20 bg-slate-200/50">Qty PO</th>
+                                                <th className="border p-4 w-24 bg-indigo-50 text-indigo-700">Online</th>
+                                                <th className="border p-4 w-24 bg-amber-50 text-amber-700">Offline</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {recapData.map((item, idx) => (
+                                                <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="border p-3 text-center font-bold text-slate-500">
+                                                        {new Date(item.arrivalDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    </td>
+                                                    <td className="border p-3 font-black text-center">{item.brand}</td>
+                                                    <td className="border p-3 text-center font-bold text-indigo-600">{item.noPo}</td>
+                                                    <td className="border p-3 font-medium uppercase px-4">{item.artikel}</td>
+                                                    <td className="border p-3 text-center">{item.color}</td>
+                                                    <td className="border p-3 text-center font-black">{item.size}</td>
+                                                    <td className="border p-3 text-center font-bold bg-slate-50">{item.qtyPo}</td>
+                                                    <td className="border p-3 text-center font-black text-indigo-600 bg-indigo-50/30">{item.qtyOnline}</td>
+                                                    <td className="border p-3 text-center font-black text-amber-600 bg-amber-50/30">{item.qtyOffline}</td>
+                                                </tr>
+                                            ))}
+                                            {recapData.length === 0 && (
+                                                <tr>
+                                                    <td colSpan="9" className="p-10 text-center text-slate-400 font-bold uppercase tracking-widest">Belum ada data kedatangan</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* MODAL: TAMBAH ARTIKEL */}
@@ -283,7 +401,7 @@
                         </div>
                     )}
 
-                    {/* MODAL: EDIT ARTIKEL (HANYA INFO PRODUK) */}
+                    {/* MODAL: EDIT ARTIKEL */}
                     {isEditModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden">
@@ -295,33 +413,15 @@
                                     <button onClick={() => setIsEditModalOpen(false)}><Icon name="x" size={20}/></button>
                                 </div>
                                 <div className="p-8 space-y-4">
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">No. PO</label>
-                                        <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value.toUpperCase()})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Brand</label>
-                                        <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.brand} onChange={e => setEditData({...editData, brand: e.target.value.toUpperCase()})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Artikel</label>
-                                        <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value.toUpperCase()})} />
-                                    </div>
+                                    <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value.toUpperCase()})} />
+                                    <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.brand} onChange={e => setEditData({...editData, brand: e.target.value.toUpperCase()})} />
+                                    <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value.toUpperCase()})} />
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Color</label>
-                                            <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value.toUpperCase()})} />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Size</label>
-                                            <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.size} onChange={e => setEditData({...editData, size: e.target.value.toUpperCase()})} />
-                                        </div>
+                                        <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value.toUpperCase()})} />
+                                        <input className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase" value={editData.size} onChange={e => setEditData({...editData, size: e.target.value.toUpperCase()})} />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest ml-1">Qty PO</label>
-                                        <input type="number" className="w-full p-3 bg-emerald-50 border-2 border-emerald-100 rounded-xl font-black text-emerald-700" value={editData.qtyPo} onChange={e => setEditData({...editData, qtyPo: parseInt(e.target.value) || 0})} />
-                                    </div>
-                                    <button onClick={handleUpdateArticle} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest mt-4 shadow-lg shadow-blue-100">Simpan Perubahan</button>
+                                    <input type="number" className="w-full p-3 bg-emerald-50 border-2 border-emerald-100 rounded-xl font-black text-emerald-700" value={editData.qtyPo} onChange={e => setEditData({...editData, qtyPo: parseInt(e.target.value) || 0})} />
+                                    <button onClick={handleUpdateArticle} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest mt-4">Simpan Perubahan</button>
                                 </div>
                             </div>
                         </div>
