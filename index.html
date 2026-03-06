@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Tracker 2026 - Cloud Sync</title>
+    <title>Inventory Tracker 2026 - Local Storage</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React and ReactDOM -->
@@ -43,36 +43,12 @@
 
         /* Memastikan header tetap di atas saat scroll */
         thead th.sticky { top: 0; z-index: 50; }
+        
+        .sticky { position: sticky !important; }
     </style>
 </head>
 <body class="bg-slate-50">
     <div id="root"></div>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Safety Guard: Menghindari error jika variabel lingkungan tidak ada
-        let firebaseConfig = {};
-        try {
-            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        } catch (e) {
-            console.error("Firebase config error", e);
-        }
-
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'inventory-2026';
-        
-        // Hanya inisialisasi jika config tersedia
-        let db, auth;
-        if (firebaseConfig.apiKey) {
-            const app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-        }
-
-        window.firebaseTools = { db, auth, appId, doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, signInAnonymously, signInWithCustomToken, onAuthStateChanged };
-    </script>
 
     <script type="text/babel">
         const { useState, useMemo, useEffect } = React;
@@ -85,59 +61,21 @@
         };
 
         const App = () => {
-            const [articles, setArticles] = useState([]);
-            const [user, setUser] = useState(null);
-            const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Default ke Maret 2026
+            // Load initial data from localStorage
+            const [articles, setArticles] = useState(() => {
+                const saved = localStorage.getItem('inventory_data_2026');
+                return saved ? JSON.parse(saved) : [];
+            });
+            
+            const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Maret 2026
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingArticle, setEditingArticle] = useState(null);
             const [formData, setFormData] = useState({ brand: '', artikel: '', color: '', size: '', qtyPo: 0 });
-            const [isOfflineMode, setIsOfflineMode] = useState(false);
 
-            const { db, auth, appId, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, signInAnonymously, signInWithCustomToken, onAuthStateChanged, doc } = window.firebaseTools;
-
+            // Sync with localStorage whenever articles change
             useEffect(() => {
-                // Jika Firebase tidak terkonfigurasi (misal di preview editor), masuk ke mode demo/offline
-                if (!auth) {
-                    setIsOfflineMode(true);
-                    setUser({ uid: 'demo-user' });
-                    return;
-                }
-
-                const initAuth = async () => {
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (err) {
-                        console.error("Auth error, fallback to offline", err);
-                        setIsOfflineMode(true);
-                        setUser({ uid: 'local-user' });
-                    }
-                };
-                initAuth();
-                const unsubscribe = onAuthStateChanged(auth, (u) => {
-                    if (u) setUser(u);
-                });
-                return () => unsubscribe();
-            }, []);
-
-            useEffect(() => {
-                if (!user || isOfflineMode || !db) return;
-                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
-                const unsubscribe = onSnapshot(colRef, 
-                    (snapshot) => {
-                        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        setArticles(data);
-                    },
-                    (error) => {
-                        console.error("Firestore Error:", error);
-                        setIsOfflineMode(true);
-                    }
-                );
-                return () => unsubscribe();
-            }, [user, isOfflineMode]);
+                localStorage.setItem('inventory_data_2026', JSON.stringify(articles));
+            }, [articles]);
 
             const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
             const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -157,61 +95,57 @@
                 return days;
             }, [currentDate]);
 
-            const handleSaveArticle = async () => {
-                if (!user || !formData.brand || !formData.artikel) return;
+            const handleSaveArticle = () => {
+                if (!formData.brand || !formData.artikel) return;
                 
-                if (isOfflineMode) {
-                    const newArt = { ...formData, id: Date.now().toString(), arrivals: {} };
-                    if (editingArticle) {
-                        setArticles(articles.map(a => a.id === editingArticle.id ? { ...newArt, id: a.id, arrivals: a.arrivals } : a));
-                    } else {
-                        setArticles([...articles, newArt]);
-                    }
-                    closeModal();
-                    return;
+                if (editingArticle) {
+                    setArticles(articles.map(art => 
+                        art.id === editingArticle.id ? { ...art, ...formData } : art
+                    ));
+                } else {
+                    const newArticle = {
+                        ...formData,
+                        id: Date.now().toString(),
+                        arrivals: {}
+                    };
+                    setArticles([...articles, newArticle]);
                 }
-
-                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
-                try {
-                    if (editingArticle) {
-                        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', editingArticle.id);
-                        await updateDoc(docRef, { ...formData });
-                    } else {
-                        await addDoc(colRef, { ...formData, arrivals: {} });
-                    }
-                    closeModal();
-                } catch (e) { console.error(e); }
+                closeModal();
             };
 
-            const handleDelete = async (id) => {
-                if (isOfflineMode) {
-                    setArticles(articles.filter(a => a.id !== id));
-                    return;
+            const handleDelete = (id) => {
+                if (confirm('Hapus artikel ini?')) {
+                    setArticles(articles.filter(art => art.id !== id));
                 }
-                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id);
-                await deleteDoc(docRef);
             };
 
-            const handleArrivalChange = async (articleId, dateKey, type, value) => {
+            const handleArrivalChange = (articleId, dateKey, type, value) => {
                 const qty = parseInt(value) || 0;
-                const article = articles.find(a => a.id === articleId);
-                if (!article) return;
-                const currentArrivals = article.arrivals || {};
-                const dayData = currentArrivals[dateKey] || { online: 0, offline: 0 };
-                const newArrivals = { ...currentArrivals, [dateKey]: { ...dayData, [type]: qty } };
-
-                if (isOfflineMode) {
-                    setArticles(articles.map(a => a.id === articleId ? { ...a, arrivals: newArrivals } : a));
-                    return;
-                }
-
-                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', articleId);
-                await updateDoc(docRef, { arrivals: newArrivals });
+                setArticles(articles.map(art => {
+                    if (art.id === articleId) {
+                        const currentArrivals = art.arrivals || {};
+                        const dayData = currentArrivals[dateKey] || { online: 0, offline: 0 };
+                        return {
+                            ...art,
+                            arrivals: {
+                                ...currentArrivals,
+                                [dateKey]: { ...dayData, [type]: qty }
+                            }
+                        };
+                    }
+                    return art;
+                }));
             };
 
             const openEdit = (art) => {
                 setEditingArticle(art);
-                setFormData({ brand: art.brand, artikel: art.artikel, color: art.color, size: art.size, qtyPo: art.qtyPo });
+                setFormData({ 
+                    brand: art.brand, 
+                    artikel: art.artikel, 
+                    color: art.color, 
+                    size: art.size, 
+                    qtyPo: art.qtyPo 
+                });
                 setIsModalOpen(true);
             };
 
@@ -227,11 +161,6 @@
                 }, 0);
             };
 
-            if (!user) return <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-900 text-white">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-                <div className="font-bold text-slate-400 italic">Memuat Sistem Inventory...</div>
-            </div>;
-
             return (
                 <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
                     <div className="max-w-full mx-auto">
@@ -244,9 +173,7 @@
                                 </div>
                                 <div>
                                     <h1 className="text-2xl font-black tracking-tight text-slate-800 uppercase leading-none">Inventory Tracker 2026</h1>
-                                    <p className="text-slate-500 text-sm font-medium italic mt-1 underline decoration-indigo-200">
-                                        {isOfflineMode ? "⚠️ Mode Lokal (Data tidak disimpan ke awan)" : "✅ Cloud Sync Active"}
-                                    </p>
+                                    <p className="text-slate-500 text-sm font-medium italic mt-1 underline decoration-indigo-200 uppercase">Local Storage Mode</p>
                                 </div>
                             </div>
                             
@@ -279,15 +206,15 @@
                                 <table className="w-full border-collapse text-[11px] table-fixed min-w-max">
                                     <thead className="sticky top-0 z-50">
                                         {/* Row 1: Header Titles */}
-                                        <tr className="bg-slate-800 text-white">
-                                            <th rowSpan="3" className="sticky sticky-col-1 bg-slate-800 border border-slate-700 p-2 text-center z-50">Aksi</th>
-                                            <th rowSpan="3" className="sticky sticky-col-2 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Brand</th>
-                                            <th rowSpan="3" className="sticky sticky-col-3 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Artikel</th>
-                                            <th rowSpan="3" className="sticky sticky-col-4 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Color</th>
-                                            <th rowSpan="3" className="sticky sticky-col-5 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Size</th>
-                                            <th rowSpan="3" className="sticky sticky-col-6 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Qty PO</th>
-                                            <th rowSpan="3" className="sticky sticky-col-7 bg-emerald-600 border border-emerald-500 p-2 text-center z-50 freeze-border uppercase">Total Kedatangan</th>
-                                            <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center font-black bg-slate-900 tracking-[0.2em] italic text-xs uppercase">
+                                        <tr className="bg-slate-800 text-white uppercase">
+                                            <th rowSpan="3" className="sticky sticky-col-1 bg-slate-800 border border-slate-700 p-2 text-center z-[60]">Aksi</th>
+                                            <th rowSpan="3" className="sticky sticky-col-2 bg-slate-800 border border-slate-700 p-2 text-center z-[60]">Brand</th>
+                                            <th rowSpan="3" className="sticky sticky-col-3 bg-slate-800 border border-slate-700 p-2 text-center z-[60]">Artikel</th>
+                                            <th rowSpan="3" className="sticky sticky-col-4 bg-slate-800 border border-slate-700 p-2 text-center z-[60]">Color</th>
+                                            <th rowSpan="3" className="sticky sticky-col-5 bg-slate-800 border border-slate-700 p-2 text-center z-[60]">Size</th>
+                                            <th rowSpan="3" className="sticky sticky-col-6 bg-slate-800 border border-slate-700 p-2 text-center z-[60]">Qty PO</th>
+                                            <th rowSpan="3" className="sticky sticky-col-7 bg-emerald-600 border border-emerald-500 p-2 text-center z-[60] freeze-border">Total Kedatangan</th>
+                                            <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center font-black bg-slate-900 tracking-[0.2em] italic text-xs">
                                                 {monthLabel} {yearLabel}
                                             </th>
                                         </tr>
@@ -303,8 +230,8 @@
                                         <tr className="bg-slate-100 uppercase">
                                             {daysInMonth.map(date => (
                                                 <React.Fragment key={`sub-${date.toISOString()}`}>
-                                                    <th className="border border-slate-200 p-1.5 text-center font-bold text-indigo-700 bg-indigo-50/50">ONLINE</th>
-                                                    <th className="border border-slate-200 p-1.5 text-center font-bold text-amber-700 bg-amber-50/50">OFFLINE</th>
+                                                    <th className="border border-slate-200 p-1.5 text-center font-bold text-indigo-700 bg-indigo-50/50">ON</th>
+                                                    <th className="border border-slate-200 p-1.5 text-center font-bold text-amber-700 bg-amber-50/50">OFF</th>
                                                 </React.Fragment>
                                             ))}
                                         </tr>
@@ -313,7 +240,7 @@
                                     <tbody className="divide-y divide-slate-100">
                                         {articles.length === 0 ? (
                                             <tr>
-                                                <td colSpan={7 + daysInMonth.length * 2} className="p-20 text-center text-slate-400 italic font-medium">
+                                                <td colSpan={7 + daysInMonth.length * 2} className="p-20 text-center text-slate-400 italic font-medium text-base">
                                                     Belum ada data artikel. Klik "Tambah Artikel" untuk memulai.
                                                 </td>
                                             </tr>
@@ -341,7 +268,7 @@
                                                     <td className={`sticky sticky-col-3 ${rowBg} group-hover:bg-indigo-50/60 p-2 font-semibold text-slate-700 border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap uppercase`}>
                                                         {art.artikel}
                                                     </td>
-                                                    <td className={`sticky sticky-col-4 ${rowBg} group-hover:bg-indigo-50/60 p-2 text-slate-500 font-medium border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap`}>
+                                                    <td className={`sticky sticky-col-4 ${rowBg} group-hover:bg-indigo-50/60 p-2 text-slate-500 font-medium border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap uppercase`}>
                                                         {art.color}
                                                     </td>
                                                     <td className={`sticky sticky-col-5 ${rowBg} group-hover:bg-indigo-50/60 p-2 text-center font-mono font-bold text-slate-700 border border-slate-200 z-10`}>
