@@ -53,11 +53,23 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Safety Guard: Menghindari error jika variabel lingkungan tidak ada
+        let firebaseConfig = {};
+        try {
+            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        } catch (e) {
+            console.error("Firebase config error", e);
+        }
+
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'inventory-2026';
+        
+        // Hanya inisialisasi jika config tersedia
+        let db, auth;
+        if (firebaseConfig.apiKey) {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        }
 
         window.firebaseTools = { db, auth, appId, doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, signInAnonymously, signInWithCustomToken, onAuthStateChanged };
     </script>
@@ -75,38 +87,57 @@
         const App = () => {
             const [articles, setArticles] = useState([]);
             const [user, setUser] = useState(null);
-            const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1)); 
+            const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Default ke Maret 2026
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingArticle, setEditingArticle] = useState(null);
             const [formData, setFormData] = useState({ brand: '', artikel: '', color: '', size: '', qtyPo: 0 });
+            const [isOfflineMode, setIsOfflineMode] = useState(false);
 
             const { db, auth, appId, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, signInAnonymously, signInWithCustomToken, onAuthStateChanged, doc } = window.firebaseTools;
 
             useEffect(() => {
+                // Jika Firebase tidak terkonfigurasi (misal di preview editor), masuk ke mode demo/offline
+                if (!auth) {
+                    setIsOfflineMode(true);
+                    setUser({ uid: 'demo-user' });
+                    return;
+                }
+
                 const initAuth = async () => {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (err) {
+                        console.error("Auth error, fallback to offline", err);
+                        setIsOfflineMode(true);
+                        setUser({ uid: 'local-user' });
                     }
                 };
                 initAuth();
-                const unsubscribe = onAuthStateChanged(auth, setUser);
+                const unsubscribe = onAuthStateChanged(auth, (u) => {
+                    if (u) setUser(u);
+                });
                 return () => unsubscribe();
             }, []);
 
             useEffect(() => {
-                if (!user) return;
+                if (!user || isOfflineMode || !db) return;
                 const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
                 const unsubscribe = onSnapshot(colRef, 
                     (snapshot) => {
                         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         setArticles(data);
                     },
-                    (error) => console.error("Firestore Error:", error)
+                    (error) => {
+                        console.error("Firestore Error:", error);
+                        setIsOfflineMode(true);
+                    }
                 );
                 return () => unsubscribe();
-            }, [user]);
+            }, [user, isOfflineMode]);
 
             const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
             const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -128,6 +159,18 @@
 
             const handleSaveArticle = async () => {
                 if (!user || !formData.brand || !formData.artikel) return;
+                
+                if (isOfflineMode) {
+                    const newArt = { ...formData, id: Date.now().toString(), arrivals: {} };
+                    if (editingArticle) {
+                        setArticles(articles.map(a => a.id === editingArticle.id ? { ...newArt, id: a.id, arrivals: a.arrivals } : a));
+                    } else {
+                        setArticles([...articles, newArt]);
+                    }
+                    closeModal();
+                    return;
+                }
+
                 const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
                 try {
                     if (editingArticle) {
@@ -141,19 +184,27 @@
             };
 
             const handleDelete = async (id) => {
-                if (!user) return;
+                if (isOfflineMode) {
+                    setArticles(articles.filter(a => a.id !== id));
+                    return;
+                }
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id);
                 await deleteDoc(docRef);
             };
 
             const handleArrivalChange = async (articleId, dateKey, type, value) => {
-                if (!user) return;
                 const qty = parseInt(value) || 0;
                 const article = articles.find(a => a.id === articleId);
                 if (!article) return;
                 const currentArrivals = article.arrivals || {};
                 const dayData = currentArrivals[dateKey] || { online: 0, offline: 0 };
                 const newArrivals = { ...currentArrivals, [dateKey]: { ...dayData, [type]: qty } };
+
+                if (isOfflineMode) {
+                    setArticles(articles.map(a => a.id === articleId ? { ...a, arrivals: newArrivals } : a));
+                    return;
+                }
+
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', articleId);
                 await updateDoc(docRef, { arrivals: newArrivals });
             };
@@ -176,7 +227,10 @@
                 }, 0);
             };
 
-            if (!user) return <div className="h-screen flex items-center justify-center font-bold text-slate-500 italic">Menghubungkan ke Cloud...</div>;
+            if (!user) return <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-900 text-white">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+                <div className="font-bold text-slate-400 italic">Memuat Sistem Inventory...</div>
+            </div>;
 
             return (
                 <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
@@ -190,7 +244,9 @@
                                 </div>
                                 <div>
                                     <h1 className="text-2xl font-black tracking-tight text-slate-800 uppercase leading-none">Inventory Tracker 2026</h1>
-                                    <p className="text-slate-500 text-sm font-medium italic mt-1 underline decoration-indigo-200">Freeze Column Mode Active</p>
+                                    <p className="text-slate-500 text-sm font-medium italic mt-1 underline decoration-indigo-200">
+                                        {isOfflineMode ? "⚠️ Mode Lokal (Data tidak disimpan ke awan)" : "✅ Cloud Sync Active"}
+                                    </p>
                                 </div>
                             </div>
                             
@@ -225,13 +281,13 @@
                                         {/* Row 1: Header Titles */}
                                         <tr className="bg-slate-800 text-white">
                                             <th rowSpan="3" className="sticky sticky-col-1 bg-slate-800 border border-slate-700 p-2 text-center z-50">Aksi</th>
-                                            <th rowSpan="3" className="sticky sticky-col-2 bg-slate-800 border border-slate-700 p-2 text-center z-50">Brand</th>
-                                            <th rowSpan="3" className="sticky sticky-col-3 bg-slate-800 border border-slate-700 p-2 text-center z-50">Artikel</th>
-                                            <th rowSpan="3" className="sticky sticky-col-4 bg-slate-800 border border-slate-700 p-2 text-center z-50">Color</th>
-                                            <th rowSpan="3" className="sticky sticky-col-5 bg-slate-800 border border-slate-700 p-2 text-center z-50">Size</th>
-                                            <th rowSpan="3" className="sticky sticky-col-6 bg-slate-800 border border-slate-700 p-2 text-center z-50">Qty PO</th>
-                                            <th rowSpan="3" className="sticky sticky-col-7 bg-emerald-600 border border-emerald-500 p-2 text-center z-50 freeze-border">Total Kedatangan</th>
-                                            <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center font-black bg-slate-900 tracking-[0.2em] italic text-xs">
+                                            <th rowSpan="3" className="sticky sticky-col-2 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Brand</th>
+                                            <th rowSpan="3" className="sticky sticky-col-3 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Artikel</th>
+                                            <th rowSpan="3" className="sticky sticky-col-4 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Color</th>
+                                            <th rowSpan="3" className="sticky sticky-col-5 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Size</th>
+                                            <th rowSpan="3" className="sticky sticky-col-6 bg-slate-800 border border-slate-700 p-2 text-center z-50 uppercase">Qty PO</th>
+                                            <th rowSpan="3" className="sticky sticky-col-7 bg-emerald-600 border border-emerald-500 p-2 text-center z-50 freeze-border uppercase">Total Kedatangan</th>
+                                            <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center font-black bg-slate-900 tracking-[0.2em] italic text-xs uppercase">
                                                 {monthLabel} {yearLabel}
                                             </th>
                                         </tr>
@@ -247,28 +303,34 @@
                                         <tr className="bg-slate-100 uppercase">
                                             {daysInMonth.map(date => (
                                                 <React.Fragment key={`sub-${date.toISOString()}`}>
-                                                    <th className="border border-slate-200 p-1.5 text-center font-bold text-indigo-700 bg-indigo-50/50">ON</th>
-                                                    <th className="border border-slate-200 p-1.5 text-center font-bold text-amber-700 bg-amber-50/50">OFF</th>
+                                                    <th className="border border-slate-200 p-1.5 text-center font-bold text-indigo-700 bg-indigo-50/50">ONLINE</th>
+                                                    <th className="border border-slate-200 p-1.5 text-center font-bold text-amber-700 bg-amber-50/50">OFFLINE</th>
                                                 </React.Fragment>
                                             ))}
                                         </tr>
                                     </thead>
                                     
                                     <tbody className="divide-y divide-slate-100">
-                                        {articles.map((art, idx) => {
+                                        {articles.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={7 + daysInMonth.length * 2} className="p-20 text-center text-slate-400 italic font-medium">
+                                                    Belum ada data artikel. Klik "Tambah Artikel" untuk memulai.
+                                                </td>
+                                            </tr>
+                                        ) : articles.map((art, idx) => {
                                             const totalArrival = calculateTotalArrival(art.arrivals);
                                             const isCompleted = totalArrival >= art.qtyPo;
                                             const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40';
                                             
                                             return (
                                                 <tr key={art.id} className={`${rowBg} hover:bg-indigo-50/40 transition-colors group`}>
-                                                    {/* Sticky Cells */}
+                                                    {/* Sticky Cells (Frozen) */}
                                                     <td className={`sticky sticky-col-1 ${rowBg} group-hover:bg-indigo-50/60 p-1 text-center border border-slate-200 z-10`}>
                                                         <div className="flex flex-col gap-1 items-center">
-                                                            <button onClick={() => openEdit(art)} className="text-blue-500 hover:bg-blue-100 p-1 rounded transition-colors" title="Edit">
+                                                            <button onClick={() => openEdit(art)} className="text-blue-500 hover:bg-blue-100 p-1 rounded transition-colors">
                                                                 <Icon name="pencil" size={14} />
                                                             </button>
-                                                            <button onClick={() => handleDelete(art.id)} className="text-red-400 hover:bg-red-100 p-1 rounded transition-colors" title="Hapus">
+                                                            <button onClick={() => handleDelete(art.id)} className="text-red-400 hover:bg-red-100 p-1 rounded transition-colors">
                                                                 <Icon name="trash-2" size={14} />
                                                             </button>
                                                         </div>
@@ -276,7 +338,7 @@
                                                     <td className={`sticky sticky-col-2 ${rowBg} group-hover:bg-indigo-50/60 p-2 font-bold uppercase border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap`}>
                                                         {art.brand}
                                                     </td>
-                                                    <td className={`sticky sticky-col-3 ${rowBg} group-hover:bg-indigo-50/60 p-2 font-semibold text-slate-700 border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap`}>
+                                                    <td className={`sticky sticky-col-3 ${rowBg} group-hover:bg-indigo-50/60 p-2 font-semibold text-slate-700 border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap uppercase`}>
                                                         {art.artikel}
                                                     </td>
                                                     <td className={`sticky sticky-col-4 ${rowBg} group-hover:bg-indigo-50/60 p-2 text-slate-500 font-medium border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap`}>
@@ -286,7 +348,7 @@
                                                         {art.size}
                                                     </td>
                                                     <td className={`sticky sticky-col-6 ${rowBg} group-hover:bg-indigo-50/60 p-2 text-center font-bold text-slate-800 border border-slate-200 z-10`}>
-                                                        {art.qtyPo.toLocaleString()}
+                                                        {(art.qtyPo || 0).toLocaleString()}
                                                     </td>
                                                     <td className={`sticky sticky-col-7 ${isCompleted ? 'bg-emerald-50 text-emerald-700' : 'bg-indigo-50 text-indigo-800'} group-hover:bg-opacity-90 p-2 text-center font-black text-[13px] border border-slate-200 z-10 freeze-border`}>
                                                         {totalArrival.toLocaleString()}
