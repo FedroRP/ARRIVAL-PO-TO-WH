@@ -38,16 +38,15 @@
         const App = () => {
             const [view, setView] = useState('dashboard');
             
-            // Filter States
             const [filterBrand, setFilterBrand] = useState('');
             const [filterPo, setFilterPo] = useState('');
             const [filterArtikel, setFilterArtikel] = useState('');
 
-            // Data State
             const [articles, setArticles] = useState([
                 {
                     id: '1',
                     noPo: 'PO-2026-001',
+                    tglPo: '2026-02-15',
                     brand: 'NIKE',
                     artikel: 'AIR MAX 90',
                     color: 'BLACK/RED',
@@ -63,18 +62,17 @@
             const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
             
             const [formArticle, setFormArticle] = useState({ 
-                noPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0
+                noPo: '', tglPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0
             });
 
             const [editData, setEditData] = useState({
-                id: '', noPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0
+                id: '', noPo: '', tglPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0
             });
 
             const [formArrival, setFormArrival] = useState({
                 targetPo: '', date: '2026-03-01', online: 0, offline: 0
             });
 
-            // Get Unique values for Filter Dropdowns
             const uniqueBrands = useMemo(() => [...new Set(articles.map(a => a.brand))].sort(), [articles]);
             const uniquePos = useMemo(() => [...new Set(articles.map(a => a.noPo))].sort(), [articles]);
             const uniqueArtikels = useMemo(() => [...new Set(articles.map(a => a.artikel))].sort(), [articles]);
@@ -94,7 +92,6 @@
                 return days;
             }, [currentDate]);
 
-            // Filter logic
             const filteredArticles = useMemo(() => {
                 return articles.filter(art => {
                     const matchBrand = filterBrand === '' || art.brand === filterBrand;
@@ -103,6 +100,15 @@
                     return matchBrand && matchPo && matchArtikel;
                 });
             }, [articles, filterBrand, filterPo, filterArtikel]);
+
+            const calculateMetrics = (arrivals) => {
+                let online = 0, offline = 0;
+                Object.values(arrivals).forEach(d => {
+                    online += (parseInt(d.online) || 0);
+                    offline += (parseInt(d.offline) || 0);
+                });
+                return { online, offline, total: online + offline };
+            };
 
             const handleSaveArticle = () => {
                 if (!formArticle.noPo || !formArticle.brand || !formArticle.artikel) {
@@ -119,7 +125,7 @@
                 };
                 setArticles([...articles, newEntry]);
                 setIsModalOpen(false);
-                setFormArticle({ noPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0 });
+                setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0 });
             };
 
             const handleUpdateArticle = () => {
@@ -151,20 +157,11 @@
                 setFormArrival({ ...formArrival, online: 0, offline: 0 });
             };
 
-            const calculateMetrics = (arrivals) => {
-                let online = 0, offline = 0;
-                Object.values(arrivals).forEach(d => {
-                    online += (d.online || 0);
-                    offline += (d.offline || 0);
-                });
-                return { online, offline, total: online + offline };
-            };
-
             const handleExportCSV = () => {
                 if (articles.length === 0) return;
-                let csvContent = "No. PO,Brand,Artikel,Size,Qty PO,Total Arrival\n";
+                let csvContent = "No. PO,Tanggal PO,Brand,Artikel,Size,Qty PO,Total Arrival\n";
                 articles.forEach(art => {
-                    csvContent += `"${art.noPo}","${art.brand}","${art.artikel}","${art.size}",${art.qtyPo},${calculateMetrics(art.arrivals).total}\n`;
+                    csvContent += `"${art.noPo}","${art.tglPo}","${art.brand}","${art.artikel}","${art.size}",${art.qtyPo},${calculateMetrics(art.arrivals).total}\n`;
                 });
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement("a");
@@ -173,17 +170,11 @@
                 link.click();
             };
 
-            const resetFilters = () => {
-                setFilterBrand('');
-                setFilterPo('');
-                setFilterArtikel('');
-            };
-
             return (
                 <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
                     <div className="max-w-[98vw] mx-auto">
                         
-                        {/* HEADER & MAIN CONTROLS */}
+                        {/* HEADER */}
                         <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             <div className="flex items-center gap-4">
                                 <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg text-white">
@@ -196,7 +187,6 @@
                             </div>
                             
                             <div className="flex flex-wrap items-center gap-3">
-                                {/* Tab Navigation */}
                                 <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
                                     <button 
                                         onClick={() => setView('dashboard')}
@@ -212,66 +202,66 @@
                                     </button>
                                 </div>
 
+                                {view === 'dashboard' && (
+                                    <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                        <button onClick={prevMonth} className="p-2 hover:bg-slate-50 border-r border-slate-200 text-slate-400"><Icon name="chevron-left" size={16}/></button>
+                                        <div className="px-4 py-2 font-black text-slate-700 min-w-[140px] text-center uppercase text-[10px] tracking-widest">
+                                            {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+                                        </div>
+                                        <button onClick={nextMonth} className="p-2 hover:bg-slate-50 border-l border-slate-200 text-slate-400"><Icon name="chevron-right" size={16}/></button>
+                                    </div>
+                                )}
+
                                 <button onClick={handleExportCSV} className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2.5 rounded-xl font-black hover:bg-emerald-100 transition-all text-[10px] uppercase tracking-widest">
                                     <Icon name="download" size={14} /> Export
                                 </button>
-                                
                                 <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-800 text-slate-800 px-4 py-2.5 rounded-xl font-black hover:bg-slate-50 transition-all text-[10px] uppercase tracking-widest">
                                     <Icon name="plus" size={14} /> Artikel
                                 </button>
-                                
                                 <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-[10px] uppercase tracking-widest">
                                     <Icon name="truck" size={14} /> Arrival
                                 </button>
                             </div>
                         </div>
 
-                        {/* FILTER PANEL */}
+                        {/* FILTERS */}
                         <div className="mb-6 flex flex-wrap items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
                             <div className="flex items-center gap-2 px-3 border-r border-slate-100">
                                 <Icon name="filter" size={16} className="text-indigo-600" />
                                 <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Filter :</span>
                             </div>
-                            
                             <select className="bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase px-4 py-2 rounded-xl text-slate-600 min-w-[150px]" value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}>
                                 <option value="">Semua Brand</option>
                                 {uniqueBrands.map(b => <option key={b} value={b}>{b}</option>)}
                             </select>
-
                             <select className="bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase px-4 py-2 rounded-xl text-slate-600 min-w-[150px]" value={filterPo} onChange={(e) => setFilterPo(e.target.value)}>
                                 <option value="">Semua No. PO</option>
                                 {uniquePos.map(p => <option key={p} value={p}>{p}</option>)}
                             </select>
-
                             <select className="bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase px-4 py-2 rounded-xl text-slate-600 min-w-[150px]" value={filterArtikel} onChange={(e) => setFilterArtikel(e.target.value)}>
                                 <option value="">Semua Artikel</option>
                                 {uniqueArtikels.map(a => <option key={a} value={a}>{a}</option>)}
                             </select>
-
-                            {(filterBrand || filterPo || filterArtikel) && (
-                                <button onClick={resetFilters} className="flex items-center gap-2 px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-all text-[10px] font-bold uppercase">
-                                    <Icon name="rotate-ccw" size={12} /> Reset
-                                </button>
-                            )}
                         </div>
 
-                        {/* DATA DISPLAY AREA */}
+                        {/* MAIN DATA TABLE */}
                         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-fade-in">
                             <div className="overflow-x-auto max-h-[70vh]">
                                 
                                 {view === 'dashboard' ? (
-                                    /* KALENDER VIEW */
+                                    /* TAMPILAN KALENDER */
                                     <table className="w-full border-collapse text-[10px]">
                                         <thead className="sticky top-0 z-30 shadow-sm">
                                             <tr className="bg-slate-800 text-white">
                                                 <th rowSpan="3" className="w-20 border border-slate-700 p-3 uppercase bg-slate-900 sticky top-0">Aksi</th>
                                                 <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase sticky-po bg-slate-800">No. PO</th>
+                                                <th rowSpan="3" className="w-28 border border-slate-700 p-3 uppercase bg-slate-800">Tgl PO</th>
                                                 <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase bg-slate-800">Brand</th>
                                                 <th rowSpan="3" className="w-40 border border-slate-700 p-3 uppercase bg-slate-800">Artikel</th>
                                                 <th rowSpan="3" className="w-16 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Size</th>
                                                 <th rowSpan="3" className="w-20 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Qty PO</th>
-                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center bg-slate-900 tracking-widest uppercase italic">
-                                                    Monitor {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center bg-slate-900 tracking-widest uppercase italic font-bold">
+                                                    Monitoring Kedatangan
                                                 </th>
                                             </tr>
                                             <tr className="bg-slate-100 text-slate-700 font-black">
@@ -298,6 +288,7 @@
                                                         </div>
                                                     </td>
                                                     <td className="border border-slate-200 p-3 font-bold text-slate-500 text-center sticky-po">{art.noPo}</td>
+                                                    <td className="border border-slate-200 p-3 font-medium text-slate-500 text-center">{art.tglPo || '-'}</td>
                                                     <td className="border border-slate-200 p-3 font-bold uppercase">{art.brand}</td>
                                                     <td className="border border-slate-200 p-3 font-medium uppercase">{art.artikel}</td>
                                                     <td className="border border-slate-200 p-3 text-center font-bold">{art.size}</td>
@@ -317,11 +308,12 @@
                                         </tbody>
                                     </table>
                                 ) : (
-                                    /* REKAP VIEW */
+                                    /* TAMPILAN REKAP TOTAL */
                                     <table className="w-full border-collapse text-[10px]">
                                         <thead className="sticky top-0 z-30">
                                             <tr className="bg-slate-800 text-white">
                                                 <th className="border border-slate-700 p-4 text-center uppercase sticky-po bg-slate-900">No. PO</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase">Tgl PO</th>
                                                 <th className="border border-slate-700 p-4 text-center uppercase">Brand</th>
                                                 <th className="border border-slate-700 p-4 text-center uppercase">Artikel</th>
                                                 <th className="border border-slate-700 p-4 text-center uppercase w-16">Size</th>
@@ -330,7 +322,7 @@
                                                 <th className="border border-slate-700 p-4 text-center uppercase bg-amber-900">Total Offline</th>
                                                 <th className="border border-slate-700 p-4 text-center uppercase bg-emerald-800">Grand Total</th>
                                                 <th className="border border-slate-700 p-4 text-center uppercase bg-rose-900">Sisa PO</th>
-                                                <th className="border border-slate-700 p-4 text-center uppercase bg-slate-900">Progres</th>
+                                                <th className="border border-slate-700 p-4 text-center uppercase bg-slate-900 w-32">Progres</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -341,6 +333,7 @@
                                                 return (
                                                     <tr key={art.id} className="table-row-hover transition-colors font-bold text-slate-700">
                                                         <td className="border border-slate-200 p-4 text-center sticky-po text-slate-500">{art.noPo}</td>
+                                                        <td className="border border-slate-200 p-4 text-center text-slate-500 font-medium">{art.tglPo || '-'}</td>
                                                         <td className="border border-slate-200 p-4 uppercase">{art.brand}</td>
                                                         <td className="border border-slate-200 p-4 uppercase font-medium">{art.artikel}</td>
                                                         <td className="border border-slate-200 p-4 text-center">{art.size}</td>
@@ -348,15 +341,15 @@
                                                         <td className="border border-slate-200 p-4 text-center text-indigo-700 bg-indigo-50/30">{m.online}</td>
                                                         <td className="border border-slate-200 p-4 text-center text-amber-700 bg-amber-50/30">{m.offline}</td>
                                                         <td className="border border-slate-200 p-4 text-center bg-emerald-50 text-emerald-800">{m.total}</td>
-                                                        <td className={`border border-slate-200 p-4 text-center ${balance > 0 ? 'text-rose-600 bg-rose-50' : 'text-emerald-600'}`}>
+                                                        <td className={`border border-slate-200 p-4 text-center ${balance > 0 ? 'text-rose-600 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}`}>
                                                             {balance}
                                                         </td>
                                                         <td className="border border-slate-200 p-4 text-center">
-                                                            <div className="flex items-center justify-center gap-3">
-                                                                <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200 min-w-[60px]">
                                                                     <div className="h-full bg-indigo-600" style={{width: `${Math.min(percent, 100)}%`}}></div>
                                                                 </div>
-                                                                <span className="text-[9px] min-w-[30px]">{percent}%</span>
+                                                                <span className="text-[9px] w-8">{percent}%</span>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -365,18 +358,11 @@
                                         </tbody>
                                     </table>
                                 )}
-
-                                {filteredArticles.length === 0 && (
-                                    <div className="p-24 text-center bg-slate-50 flex flex-col items-center gap-4 opacity-30">
-                                        <Icon name="package-search" size={64} />
-                                        <span className="font-black uppercase tracking-[0.5em] text-xs">Belum ada data</span>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* MODAL: INPUT ARTIKEL */}
+                    {/* MODAL TAMBAH ARTIKEL */}
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in">
@@ -385,88 +371,82 @@
                                     <button onClick={() => setIsModalOpen(false)} className="hover:rotate-90 transition-transform"><Icon name="x" size={24} /></button>
                                 </div>
                                 <div className="p-8 grid grid-cols-2 gap-5">
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">No. PO</label>
-                                        <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold uppercase" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">No. PO</label>
+                                        <input placeholder="NO. PO" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Brand</label>
-                                        <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold uppercase" value={formArticle.brand} onChange={e => setFormArticle({...formArticle, brand: e.target.value})} />
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal PO</label>
+                                        <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
                                     </div>
-                                    <div className="col-span-2 space-y-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Nama Artikel</label>
-                                        <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold uppercase" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Brand</label>
+                                        <input placeholder="BRAND" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.brand} onChange={e => setFormArticle({...formArticle, brand: e.target.value})} />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Size</label>
-                                        <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold uppercase" value={formArticle.size} onChange={e => setFormArticle({...formArticle, size: e.target.value})} />
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Artikel</label>
+                                        <input placeholder="ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Quantity PO</label>
-                                        <input type="number" className="w-full p-4 bg-emerald-50 border border-emerald-100 rounded-2xl outline-none font-black text-emerald-700" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Size</label>
+                                        <input placeholder="SIZE" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.size} onChange={e => setFormArticle({...formArticle, size: e.target.value})} />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Qty Target</label>
+                                        <input type="number" placeholder="QTY PO" className="w-full p-4 bg-emerald-50 border border-emerald-100 rounded-2xl outline-none font-black text-emerald-700" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
                                     </div>
                                     <div className="col-span-2 flex gap-4 mt-8">
                                         <button onClick={() => setIsModalOpen(false)} className="flex-1 p-4 bg-slate-100 rounded-2xl font-black text-slate-400 uppercase text-[10px]">Batal</button>
-                                        <button onClick={handleSaveArticle} className="flex-1 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-indigo-200">Simpan Artikel</button>
+                                        <button onClick={handleSaveArticle} className="flex-1 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Simpan Artikel</button>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* MODAL: EDIT ARTIKEL */}
+                    {/* MODAL EDIT ARTIKEL */}
                     {isEditModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in">
                                 <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
-                                    <h3 className="font-black uppercase tracking-widest text-sm">Update Data Artikel</h3>
-                                    <button onClick={() => setIsEditModalOpen(false)}><Icon name="x" size={20}/></button>
+                                    <h3 className="text-xl font-black uppercase tracking-tight">Edit Artikel</h3>
+                                    <button onClick={() => setIsEditModalOpen(false)}><Icon name="x" size={24} /></button>
                                 </div>
-                                <div className="p-8 space-y-4">
-                                    <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value.toUpperCase()})} />
-                                    <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.brand} onChange={e => setEditData({...editData, brand: e.target.value.toUpperCase()})} />
-                                    <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value.toUpperCase()})} />
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.size} onChange={e => setEditData({...editData, size: e.target.value.toUpperCase()})} />
-                                        <input type="number" className="w-full p-4 bg-emerald-50 border rounded-2xl font-black text-emerald-700" value={editData.qtyPo} onChange={e => setEditData({...editData, qtyPo: parseInt(e.target.value) || 0})} />
+                                <div className="p-8 grid grid-cols-2 gap-5">
+                                    <input placeholder="NO. PO" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value})} />
+                                    <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" value={editData.tglPo} onChange={e => setEditData({...editData, tglPo: e.target.value})} />
+                                    <input placeholder="BRAND" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={editData.brand} onChange={e => setEditData({...editData, brand: e.target.value})} />
+                                    <input placeholder="ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value})} />
+                                    <input placeholder="SIZE" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={editData.size} onChange={e => setEditData({...editData, size: e.target.value})} />
+                                    <input type="number" className="w-full p-4 bg-emerald-50 border border-emerald-100 rounded-2xl outline-none font-black text-emerald-700" value={editData.qtyPo} onChange={e => setEditData({...editData, qtyPo: parseInt(e.target.value) || 0})} />
+                                    <div className="col-span-2 flex gap-4 mt-8">
+                                        <button onClick={() => setIsEditModalOpen(false)} className="flex-1 p-4 bg-slate-100 rounded-2xl font-black text-slate-400 uppercase text-[10px]">Batal</button>
+                                        <button onClick={handleUpdateArticle} className="flex-1 p-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Update Data</button>
                                     </div>
-                                    <button onClick={handleUpdateArticle} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest mt-4">Simpan Perubahan</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* MODAL: INPUT ARRIVAL */}
+                    {/* MODAL ARRIVAL */}
                     {isArrivalModalOpen && (
                         <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
                                 <div className="p-6 border-b flex justify-between items-center text-indigo-600">
-                                    <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><Icon name="truck" /> Pencatatan Kedatangan</h3>
+                                    <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><Icon name="truck" /> Input Kedatangan</h3>
                                     <button onClick={() => setIsArrivalModalOpen(false)}><Icon name="x" size={20} /></button>
                                 </div>
                                 <div className="p-8 space-y-4">
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-black uppercase text-indigo-400 ml-1 block">Pilih Artikel (PO)</label>
-                                        <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-indigo-700 text-sm outline-none" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
-                                            <option value="">-- PILIH ARTIKEL --</option>
-                                            {articles.map(a => <option key={a.id} value={a.noPo}>{a.noPo} | {a.artikel} ({a.size})</option>)}
-                                        </select>
+                                    <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-indigo-700 text-sm" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
+                                        <option value="">-- PILIH ARTIKEL --</option>
+                                        {articles.map(a => <option key={a.id} value={a.noPo}>{a.noPo} | {a.artikel}</option>)}
+                                    </select>
+                                    <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <input type="number" placeholder="ONLINE" className="w-full p-4 bg-white border-2 border-indigo-50 rounded-2xl font-black text-indigo-600 text-center" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
+                                        <input type="number" placeholder="OFFLINE" className="w-full p-4 bg-white border-2 border-amber-50 rounded-2xl font-black text-amber-600 text-center" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-1 block">Tanggal Kedatangan</label>
-                                        <input type="date" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4 pt-2">
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-black uppercase text-indigo-600 ml-1 block">Qty Online</label>
-                                            <input type="number" className="w-full p-4 bg-white border-2 border-indigo-50 rounded-2xl font-black text-indigo-600 text-center" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-black uppercase text-amber-600 ml-1 block">Qty Offline</label>
-                                            <input type="number" className="w-full p-4 bg-white border-2 border-amber-50 rounded-2xl font-black text-amber-600 text-center" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
-                                        </div>
-                                    </div>
-                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest mt-6 shadow-xl shadow-indigo-100">Update Kedatangan</button>
+                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest mt-6">Simpan Kedatangan</button>
                                 </div>
                             </div>
                         </div>
