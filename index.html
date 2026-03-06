@@ -39,7 +39,10 @@
         .sticky-col-7 { left: calc(var(--w-aksi) + var(--w-brand) + var(--w-artikel) + var(--w-color) + var(--w-size) + var(--w-qtypo)); z-index: 40; width: var(--w-total); }
 
         /* Garis pembatas tebal antara kolom beku dan kalender */
-        .freeze-border { border-right: 3px solid #e2e8f0 !important; }
+        .freeze-border { border-right: 3px solid #cbd5e1 !important; }
+
+        /* Memastikan header tetap di atas saat scroll */
+        thead th.sticky { top: 0; z-index: 50; }
     </style>
 </head>
 <body class="bg-slate-50">
@@ -177,7 +180,7 @@
 
             return (
                 <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
-                    <div className="max-w-[100vw] mx-auto">
+                    <div className="max-w-full mx-auto">
                         
                         {/* Header Section */}
                         <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -217,7 +220,7 @@
                         {/* Table Container */}
                         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
                             <div className="overflow-x-auto max-h-[75vh]">
-                                <table className="w-full border-collapse text-[11px] table-fixed">
+                                <table className="w-full border-collapse text-[11px] table-fixed min-w-max">
                                     <thead className="sticky top-0 z-50">
                                         {/* Row 1: Header Titles */}
                                         <tr className="bg-slate-800 text-white">
@@ -227,14 +230,13 @@
                                             <th rowSpan="3" className="sticky sticky-col-4 bg-slate-800 border border-slate-700 p-2 text-center z-50">Color</th>
                                             <th rowSpan="3" className="sticky sticky-col-5 bg-slate-800 border border-slate-700 p-2 text-center z-50">Size</th>
                                             <th rowSpan="3" className="sticky sticky-col-6 bg-slate-800 border border-slate-700 p-2 text-center z-50">Qty PO</th>
-                                            <th rowSpan="3" className="sticky sticky-col-7 bg-emerald-600 border border-emerald-500 p-2 text-center z-50 freeze-border shadow-lg">Total Kedatangan</th>
+                                            <th rowSpan="3" className="sticky sticky-col-7 bg-emerald-600 border border-emerald-500 p-2 text-center z-50 freeze-border">Total Kedatangan</th>
                                             <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center font-black bg-slate-900 tracking-[0.2em] italic text-xs">
                                                 {monthLabel} {yearLabel}
                                             </th>
                                         </tr>
                                         {/* Row 2: Dates */}
                                         <tr className="bg-slate-50 text-slate-700 font-black">
-                                            {/* (Empty th for sticky alignment in header row 2) */}
                                             {daysInMonth.map(date => (
                                                 <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-2 text-center text-sm min-w-[120px]">
                                                     {date.getDate()}
@@ -263,21 +265,21 @@
                                                     {/* Sticky Cells */}
                                                     <td className={`sticky sticky-col-1 ${rowBg} group-hover:bg-indigo-50/60 p-1 text-center border border-slate-200 z-10`}>
                                                         <div className="flex flex-col gap-1 items-center">
-                                                            <button onClick={() => openEdit(art)} className="text-blue-500 hover:bg-blue-100 p-1 rounded" title="Edit">
+                                                            <button onClick={() => openEdit(art)} className="text-blue-500 hover:bg-blue-100 p-1 rounded transition-colors" title="Edit">
                                                                 <Icon name="pencil" size={14} />
                                                             </button>
-                                                            <button onClick={() => handleDelete(art.id)} className="text-red-400 hover:bg-red-100 p-1 rounded" title="Hapus">
+                                                            <button onClick={() => handleDelete(art.id)} className="text-red-400 hover:bg-red-100 p-1 rounded transition-colors" title="Hapus">
                                                                 <Icon name="trash-2" size={14} />
                                                             </button>
                                                         </div>
                                                     </td>
-                                                    <td className={`sticky sticky-col-2 ${rowBg} group-hover:bg-indigo-50/60 p-2 font-bold uppercase border border-slate-200 z-10`}>
+                                                    <td className={`sticky sticky-col-2 ${rowBg} group-hover:bg-indigo-50/60 p-2 font-bold uppercase border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap`}>
                                                         {art.brand}
                                                     </td>
-                                                    <td className={`sticky sticky-col-3 ${rowBg} group-hover:bg-indigo-50/60 p-2 font-semibold text-slate-700 border border-slate-200 z-10`}>
+                                                    <td className={`sticky sticky-col-3 ${rowBg} group-hover:bg-indigo-50/60 p-2 font-semibold text-slate-700 border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap`}>
                                                         {art.artikel}
                                                     </td>
-                                                    <td className={`sticky sticky-col-4 ${rowBg} group-hover:bg-indigo-50/60 p-2 text-slate-500 font-medium border border-slate-200 z-10`}>
+                                                    <td className={`sticky sticky-col-4 ${rowBg} group-hover:bg-indigo-50/60 p-2 text-slate-500 font-medium border border-slate-200 z-10 overflow-hidden text-ellipsis whitespace-nowrap`}>
                                                         {art.color}
                                                     </td>
                                                     <td className={`sticky sticky-col-5 ${rowBg} group-hover:bg-indigo-50/60 p-2 text-center font-mono font-bold text-slate-700 border border-slate-200 z-10`}>
@@ -286,7 +288,7 @@
                                                     <td className={`sticky sticky-col-6 ${rowBg} group-hover:bg-indigo-50/60 p-2 text-center font-bold text-slate-800 border border-slate-200 z-10`}>
                                                         {art.qtyPo.toLocaleString()}
                                                     </td>
-                                                    <td className={`sticky sticky-col-7 ${isCompleted ? 'bg-emerald-50 text-emerald-700' : 'bg-indigo-50 text-indigo-800'} group-hover:bg-opacity-90 p-2 text-center font-black text-[13px] border border-slate-200 z-10 freeze-border shadow-sm`}>
+                                                    <td className={`sticky sticky-col-7 ${isCompleted ? 'bg-emerald-50 text-emerald-700' : 'bg-indigo-50 text-indigo-800'} group-hover:bg-opacity-90 p-2 text-center font-black text-[13px] border border-slate-200 z-10 freeze-border`}>
                                                         {totalArrival.toLocaleString()}
                                                     </td>
                                                     
@@ -295,7 +297,7 @@
                                                         const dateKey = date.toISOString().split('T')[0];
                                                         return (
                                                             <React.Fragment key={`${art.id}-${dateKey}`}>
-                                                                <td className="border border-slate-200 p-0">
+                                                                <td className="border border-slate-200 p-0 min-w-[60px]">
                                                                     <input 
                                                                         type="number" 
                                                                         className="w-full h-11 text-center bg-transparent focus:bg-white focus:ring-inset focus:ring-2 focus:ring-indigo-500 outline-none border-none transition-all font-bold text-indigo-700 placeholder-slate-200"
@@ -304,7 +306,7 @@
                                                                         placeholder="-"
                                                                     />
                                                                 </td>
-                                                                <td className="border border-slate-200 p-0">
+                                                                <td className="border border-slate-200 p-0 min-w-[60px]">
                                                                     <input 
                                                                         type="number" 
                                                                         className="w-full h-11 text-center bg-transparent focus:bg-white focus:ring-inset focus:ring-2 focus:ring-amber-500 outline-none border-none transition-all font-bold text-amber-700 placeholder-slate-200"
