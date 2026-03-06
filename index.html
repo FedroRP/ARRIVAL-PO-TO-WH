@@ -40,14 +40,14 @@
             const [articles, setArticles] = useState([
                 {
                     id: '1',
+                    noPo: 'PO-001',
                     brand: 'NIKE',
                     artikel: 'AIR MAX 90',
                     color: 'BLACK/RED',
                     size: '42',
                     qtyPo: 500,
                     arrivals: { 
-                        '2026-03-01': { online: 50, offline: 50 },
-                        '2026-03-02': { online: 20, offline: 30 }
+                        '2026-03-01': { online: 50, offline: 50 }
                     }
                 }
             ]);
@@ -55,7 +55,19 @@
             const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); 
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingArticle, setEditingArticle] = useState(null);
-            const [formData, setFormData] = useState({ brand: '', artikel: '', color: '', size: '', qtyPo: 0 });
+            
+            // State Form yang diperluas
+            const [formData, setFormData] = useState({ 
+                noPo: '', 
+                brand: '', 
+                artikel: '', 
+                color: '', 
+                size: '', 
+                qtyPo: 0,
+                inputDate: '2026-03-01',
+                inputOnline: 0,
+                inputOffline: 0
+            });
 
             const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
             const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -75,37 +87,27 @@
                 return days;
             }, [currentDate]);
 
-            const handleArrivalChange = (articleId, dateKey, type, value) => {
-                const qty = parseInt(value) || 0;
-                setArticles(prev => prev.map(art => {
-                    if (art.id === articleId) {
-                        const currentArrival = art.arrivals[dateKey] || { online: 0, offline: 0 };
-                        return {
-                            ...art,
-                            arrivals: { 
-                                ...art.arrivals, 
-                                [dateKey]: { ...currentArrival, [type]: qty } 
-                            }
-                        };
-                    }
-                    return art;
-                }));
-            };
-
             const openAddModal = () => {
                 setEditingArticle(null);
-                setFormData({ brand: '', artikel: '', color: '', size: '', qtyPo: 0 });
+                setFormData({ 
+                    noPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0,
+                    inputDate: '2026-03-01', inputOnline: 0, inputOffline: 0 
+                });
                 setIsModalOpen(true);
             };
 
             const openEditModal = (article) => {
                 setEditingArticle(article.id);
                 setFormData({ 
+                    noPo: article.noPo, 
                     brand: article.brand, 
                     artikel: article.artikel, 
                     color: article.color, 
                     size: article.size, 
-                    qtyPo: article.qtyPo 
+                    qtyPo: article.qtyPo,
+                    inputDate: '2026-03-01',
+                    inputOnline: 0,
+                    inputOffline: 0
                 });
                 setIsModalOpen(true);
             };
@@ -121,14 +123,46 @@
             };
 
             const handleSubmit = () => {
-                if (!formData.brand || !formData.artikel) return;
+                if (!formData.noPo || !formData.brand || !formData.artikel) {
+                    alert("Mohon lengkapi No. PO, Brand, dan Artikel.");
+                    return;
+                }
                 
+                // Cek No. PO Unik (Hanya jika tambah baru)
+                if (!editingArticle) {
+                    const isDuplicate = articles.some(art => art.noPo === formData.noPo);
+                    if (isDuplicate) {
+                        alert(`No. PO ${formData.noPo} sudah terdaftar! Gunakan No. PO yang berbeda.`);
+                        return;
+                    }
+                }
+
+                const arrivalData = {
+                    online: parseInt(formData.inputOnline) || 0,
+                    offline: parseInt(formData.inputOffline) || 0
+                };
+
                 if (editingArticle) {
-                    setArticles(articles.map(art => 
-                        art.id === editingArticle ? { ...art, ...formData } : art
-                    ));
+                    setArticles(articles.map(art => {
+                        if (art.id === editingArticle) {
+                            const updatedArrivals = { ...art.arrivals };
+                            // Timpa data kedatangan pada tanggal yang dipilih
+                            updatedArrivals[formData.inputDate] = arrivalData;
+                            return { ...art, ...formData, arrivals: updatedArrivals };
+                        }
+                        return art;
+                    }));
                 } else {
-                    setArticles([...articles, { ...formData, id: Date.now().toString(), arrivals: {} }]);
+                    setArticles([...articles, { 
+                        id: Date.now().toString(),
+                        noPo: formData.noPo,
+                        brand: formData.brand,
+                        artikel: formData.artikel,
+                        color: formData.color,
+                        size: formData.size,
+                        qtyPo: formData.qtyPo,
+                        arrivals: { [formData.inputDate]: arrivalData } 
+                    }]);
                 }
                 
                 setIsModalOpen(false);
@@ -178,6 +212,7 @@
                                     <thead className="sticky top-0 z-30 shadow-sm">
                                         <tr className="bg-slate-800 text-white">
                                             <th rowSpan="3" className="w-24 border border-slate-700 p-4 text-center uppercase font-bold bg-slate-800">Aksi</th>
+                                            <th rowSpan="3" className="w-24 border border-slate-700 p-4 text-center uppercase font-bold bg-slate-800">No. PO</th>
                                             <th rowSpan="3" className="w-32 border border-slate-700 p-4 text-center uppercase font-bold bg-slate-800">Brand</th>
                                             <th rowSpan="3" className="w-40 border border-slate-700 p-4 text-center uppercase font-bold bg-slate-800">Artikel</th>
                                             <th rowSpan="3" className="w-32 border border-slate-700 p-3 text-center uppercase font-bold bg-slate-800">Color</th>
@@ -218,7 +253,7 @@
                                                             <button 
                                                                 onClick={() => openEditModal(art)}
                                                                 className="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                                title="Edit Artikel"
+                                                                title="Update Kedatangan"
                                                             >
                                                                 <Icon name="pencil" size={14} />
                                                             </button>
@@ -231,6 +266,7 @@
                                                             </button>
                                                         </div>
                                                     </td>
+                                                    <td className="border border-slate-200 p-3 font-mono font-bold text-slate-600">{art.noPo}</td>
                                                     <td className="border border-slate-200 p-3 font-bold uppercase text-slate-700">{art.brand}</td>
                                                     <td className="border border-slate-200 p-3 font-semibold text-slate-700">{art.artikel}</td>
                                                     <td className="border border-slate-200 p-3 text-slate-500 font-medium">{art.color}</td>
@@ -243,25 +279,14 @@
                                                     
                                                     {daysInMonth.map(date => {
                                                         const dateKey = date.toISOString().split('T')[0];
+                                                        const daily = art.arrivals[dateKey] || { online: 0, offline: 0 };
                                                         return (
                                                             <React.Fragment key={`${art.id}-${dateKey}`}>
-                                                                <td className="border border-slate-200 p-0">
-                                                                    <input 
-                                                                        type="number" 
-                                                                        className="w-full h-11 text-center bg-transparent focus:bg-white focus:ring-inset focus:ring-2 focus:ring-indigo-500 outline-none border-none transition-all font-bold text-indigo-700"
-                                                                        value={art.arrivals[dateKey]?.online || ''}
-                                                                        onChange={(e) => handleArrivalChange(art.id, dateKey, 'online', e.target.value)}
-                                                                        placeholder="-"
-                                                                    />
+                                                                <td className="border border-slate-200 p-2 text-center font-bold text-indigo-700 bg-indigo-50/20">
+                                                                    {daily.online || '-'}
                                                                 </td>
-                                                                <td className="border border-slate-200 p-0">
-                                                                    <input 
-                                                                        type="number" 
-                                                                        className="w-full h-11 text-center bg-transparent focus:bg-white focus:ring-inset focus:ring-2 focus:ring-amber-500 outline-none border-none transition-all font-bold text-amber-700"
-                                                                        value={art.arrivals[dateKey]?.offline || ''}
-                                                                        onChange={(e) => handleArrivalChange(art.id, dateKey, 'offline', e.target.value)}
-                                                                        placeholder="-"
-                                                                    />
+                                                                <td className="border border-slate-200 p-2 text-center font-bold text-amber-700 bg-amber-50/20">
+                                                                    {daily.offline || '-'}
                                                                 </td>
                                                             </React.Fragment>
                                                         );
@@ -275,92 +300,154 @@
                         </div>
 
                         <div className="mt-6 flex flex-wrap items-center justify-end gap-6 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                            <div className="flex items-center gap-2">
-                                <span className="w-3.5 h-3.5 rounded bg-indigo-500 shadow-sm shadow-indigo-200"></span> Online Channel
+                            <div className="flex items-center gap-2 italic">
+                                <Icon name="lock" size={12} /> Input hanya melalui tombol Tambah/Edit
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="w-3.5 h-3.5 rounded bg-amber-500 shadow-sm shadow-amber-200"></span> Offline Channel
+                                <span className="w-3.5 h-3.5 rounded bg-indigo-500 shadow-sm shadow-indigo-200"></span> Online
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="w-3.5 h-3.5 rounded bg-emerald-500 shadow-sm shadow-emerald-200"></span> Target Fulfilled
+                                <span className="w-3.5 h-3.5 rounded bg-amber-500 shadow-sm shadow-amber-200"></span> Offline
                             </div>
                         </div>
                     </div>
 
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden transform animate-in fade-in zoom-in duration-200">
-                                <div className="bg-indigo-600 p-8 text-white">
-                                    <h3 className="text-2xl font-black flex items-center gap-3 italic uppercase tracking-tighter">
-                                        <Icon name={editingArticle ? "pencil" : "package"} size={24} /> 
-                                        {editingArticle ? "Edit Artikel" : "Tambah Artikel"}
-                                    </h3>
-                                    <p className="text-indigo-100 text-xs mt-1 font-medium">Lengkapi detail artikel kedatangan produk</p>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform animate-in fade-in zoom-in duration-200">
+                                <div className="bg-indigo-600 p-6 text-white flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-xl font-black flex items-center gap-3 uppercase tracking-tighter">
+                                            <Icon name={editingArticle ? "pencil" : "plus-circle"} size={24} /> 
+                                            {editingArticle ? "Update Kedatangan" : "Tambah Artikel Baru"}
+                                        </h3>
+                                        <p className="text-indigo-100 text-[10px] mt-1 font-medium uppercase tracking-widest">Detail Produk & Log Kedatangan</p>
+                                    </div>
+                                    <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-indigo-500 rounded-full transition-colors">
+                                        <Icon name="x" size={20} />
+                                    </button>
                                 </div>
                                 
-                                <div className="p-8 space-y-5 text-xs font-bold text-slate-500">
-                                    <div className="space-y-1.5">
-                                        <label className="uppercase ml-1 tracking-wider">Nama Brand</label>
-                                        <input 
-                                            placeholder="NIKE / ADIDAS / PUMA"
-                                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all" 
-                                            value={formData.brand} 
-                                            onChange={e => setFormData({...formData, brand: e.target.value.toUpperCase()})} 
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="uppercase ml-1 tracking-wider text-indigo-600">Nama Artikel</label>
-                                        <input 
-                                            placeholder="MODEL / KODE PRODUK"
-                                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all" 
-                                            value={formData.artikel} 
-                                            onChange={e => setFormData({...formData, artikel: e.target.value.toUpperCase()})} 
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                            <label className="uppercase ml-1 tracking-wider">Warna</label>
-                                            <input 
-                                                placeholder="COLORWAY"
-                                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all" 
-                                                value={formData.color} 
-                                                onChange={e => setFormData({...formData, color: e.target.value.toUpperCase()})} 
-                                            />
+                                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[70vh] overflow-y-auto">
+                                    {/* Kolom Kiri: Informasi Artikel */}
+                                    <div className="space-y-4">
+                                        <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] border-b pb-2">Informasi Produk</h4>
+                                        <div className="space-y-3 text-xs font-bold text-slate-500">
+                                            <div className="space-y-1">
+                                                <label className="uppercase ml-1 tracking-wider">No. PO (Unique)</label>
+                                                <input 
+                                                    disabled={editingArticle}
+                                                    placeholder="Contoh: PO-2026-001"
+                                                    className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all ${editingArticle ? 'opacity-50 cursor-not-allowed' : ''}`} 
+                                                    value={formData.noPo} 
+                                                    onChange={e => setFormData({...formData, noPo: e.target.value.toUpperCase()})} 
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="uppercase ml-1 tracking-wider">Brand</label>
+                                                <input 
+                                                    placeholder="NIKE / ADIDAS"
+                                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all" 
+                                                    value={formData.brand} 
+                                                    onChange={e => setFormData({...formData, brand: e.target.value.toUpperCase()})} 
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="uppercase ml-1 tracking-wider text-indigo-600">Artikel</label>
+                                                <input 
+                                                    placeholder="MODEL PRODUK"
+                                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all" 
+                                                    value={formData.artikel} 
+                                                    onChange={e => setFormData({...formData, artikel: e.target.value.toUpperCase()})} 
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <label className="uppercase ml-1 tracking-wider">Color</label>
+                                                    <input 
+                                                        placeholder="WARNA"
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all" 
+                                                        value={formData.color} 
+                                                        onChange={e => setFormData({...formData, color: e.target.value.toUpperCase()})} 
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="uppercase ml-1 tracking-wider">Size</label>
+                                                    <input 
+                                                        placeholder="UKURAN"
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase transition-all" 
+                                                        value={formData.size} 
+                                                        onChange={e => setFormData({...formData, size: e.target.value.toUpperCase()})} 
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="uppercase ml-1 tracking-wider text-emerald-600">Quantity PO</label>
+                                                <input 
+                                                    type="number" 
+                                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-black transition-all" 
+                                                    value={formData.qtyPo || ''}
+                                                    onChange={e => setFormData({...formData, qtyPo: parseInt(e.target.value) || 0})} 
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <label className="uppercase ml-1 tracking-wider">Size</label>
-                                            <input 
-                                                placeholder="EU/US"
-                                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono font-bold transition-all" 
-                                                value={formData.size} 
-                                                onChange={e => setFormData({...formData, size: e.target.value.toUpperCase()})} 
-                                            />
-                                        </div>
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <label className="uppercase ml-1 tracking-wider text-emerald-600">Quantity PO</label>
-                                        <input 
-                                            type="number" 
-                                            placeholder="Total Unit"
-                                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 font-black transition-all" 
-                                            value={formData.qtyPo || ''}
-                                            onChange={e => setFormData({...formData, qtyPo: parseInt(e.target.value) || 0})} 
-                                        />
+
+                                    {/* Kolom Kanan: Input Kedatangan */}
+                                    <div className="bg-slate-50 p-4 rounded-2xl space-y-4 border border-slate-200">
+                                        <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] border-b border-slate-200 pb-2">Log Kedatangan</h4>
+                                        <div className="space-y-4 text-xs font-bold text-slate-500">
+                                            <div className="space-y-1">
+                                                <label className="uppercase ml-1 tracking-wider">Tanggal Kedatangan</label>
+                                                <input 
+                                                    type="date"
+                                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold transition-all" 
+                                                    value={formData.inputDate}
+                                                    onChange={e => setFormData({...formData, inputDate: e.target.value})}
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="uppercase ml-1 tracking-wider text-indigo-600">Kedatangan Online</label>
+                                                <input 
+                                                    type="number" 
+                                                    placeholder="Qty Unit"
+                                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-black text-indigo-700 transition-all" 
+                                                    value={formData.inputOnline || ''}
+                                                    onChange={e => setFormData({...formData, inputOnline: parseInt(e.target.value) || 0})} 
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="uppercase ml-1 tracking-wider text-amber-600">Kedatangan Offline</label>
+                                                <input 
+                                                    type="number" 
+                                                    placeholder="Qty Unit"
+                                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-black text-amber-700 transition-all" 
+                                                    value={formData.inputOffline || ''}
+                                                    onChange={e => setFormData({...formData, inputOffline: parseInt(e.target.value) || 0})} 
+                                                />
+                                            </div>
+                                            <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 flex items-start gap-3 mt-4">
+                                                <Icon name="info" size={16} className="text-indigo-600 mt-0.5" />
+                                                <p className="text-[10px] leading-relaxed text-indigo-800 italic">
+                                                    Data kedatangan akan otomatis masuk ke kolom tanggal <b>{new Date(formData.inputDate).getDate()} {new Date(formData.inputDate).toLocaleString('id-ID', {month: 'short'})}</b> di tabel utama.
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                                 
-                                <div className="p-8 bg-slate-50 flex gap-4">
+                                <div className="p-6 bg-slate-100 flex gap-4">
                                     <button 
                                         onClick={() => setIsModalOpen(false)} 
-                                        className="flex-1 p-4 bg-white border border-slate-200 rounded-2xl font-bold text-slate-500 hover:bg-slate-100 transition-colors uppercase tracking-widest text-[10px]"
+                                        className="flex-1 p-4 bg-white border border-slate-200 rounded-2xl font-bold text-slate-500 hover:bg-slate-200 transition-colors uppercase tracking-widest text-[10px]"
                                     >
-                                        Batal
+                                        Tutup
                                     </button>
                                     <button 
                                         onClick={handleSubmit} 
                                         className="flex-1 p-4 bg-indigo-600 text-white rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all uppercase tracking-widest text-[10px]"
                                     >
-                                        {editingArticle ? "Update" : "Simpan"}
+                                        {editingArticle ? "Update & Simpan" : "Simpan Artikel"}
                                     </button>
                                 </div>
                             </div>
