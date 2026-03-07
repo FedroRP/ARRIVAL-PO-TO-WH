@@ -28,7 +28,7 @@
     <script type="text/babel">
         const { useState, useMemo, useEffect, useRef } = React;
 
-        // URL APPS SCRIPT TERBARU
+        // URL APPS SCRIPT ANDA
         const SPREADSHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwvv5Op0SHL3PODTm602j7g_KlgCiOO7AiZ3Pa1eppMEln6G_cGgJTURHQ4nQISLPUw/exec"; 
 
         const BRAND_LIST = ["HEYMALE", "PREPSTUDIO", "ZOMA BASIC", "HEYLOCAL", "SHUWA MODEST", "BOONABOO", "ANSHARIYA", "NOSTALGY"];
@@ -37,10 +37,7 @@
 
         const toLocalDateString = (date) => {
             const d = new Date(date);
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         };
 
         const Icon = ({ name, size = 18, className = "" }) => {
@@ -89,26 +86,50 @@
         const App = () => {
             const [view, setView] = useState('dashboard');
             const [dbStatus, setDbStatus] = useState('idle');
-            // Menentukan bulan awal: Maret 2026
             const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1));
-            const [articles, setArticles] = useState(() => {
-                const saved = localStorage.getItem('inventory_data_2026_fixed');
-                return saved ? JSON.parse(saved) : [];
-            });
+            const [articles, setArticles] = useState([]);
 
-            const [isModalOpen, setIsModalOpen] = useState(false);
-            const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
-            const [formArticle, setFormArticle] = useState({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
-            const [formArrival, setFormArrival] = useState({ targetPo: '', date: toLocalDateString(new Date()), color: '', size: '', online: 0, offline: 0 });
+            // 1. MENGAMBIL DATA DARI GOOGLE SHEETS SAAT PERTAMA KALI DIBUKA
+            useEffect(() => {
+                fetchDataFromSheets();
+            }, []);
 
-            // SINKRONISASI KE GOOGLE SHEETS
+            const fetchDataFromSheets = async () => {
+                setDbStatus('loading');
+                try {
+                    // Script Apps Script harus mendukung action=read
+                    const response = await fetch(`${SPREADSHEET_WEB_APP_URL}?action=read`);
+                    const result = await response.json();
+                    if (result && Array.isArray(result)) {
+                        setArticles(result);
+                        localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(result));
+                        setDbStatus('connected');
+                    } else {
+                        // Fallback ke local jika gagal
+                        const saved = localStorage.getItem('inventory_data_2026_fixed');
+                        if (saved) setArticles(JSON.parse(saved));
+                        setDbStatus('idle');
+                    }
+                } catch (err) {
+                    console.error("Fetch Error:", err);
+                    const saved = localStorage.getItem('inventory_data_2026_fixed');
+                    if (saved) setArticles(JSON.parse(saved));
+                    setDbStatus('error');
+                }
+            };
+
+            // 2. SINKRONISASI KE GOOGLE SHEETS
             const syncToSheets = async (latestData) => {
                 if (!SPREADSHEET_WEB_APP_URL) return;
                 setDbStatus('syncing');
                 try {
                     const encodedData = encodeURIComponent(JSON.stringify(latestData));
                     const finalUrl = `${SPREADSHEET_WEB_APP_URL}?action=sync&data=${encodedData}`;
+                    
+                    // Gunakan fetch dengan mode no-cors jika Apps Script hanya doGet sederhana
+                    // Namun idealnya Apps Script membalas dengan JSON
                     await fetch(finalUrl, { mode: 'no-cors' });
+                    
                     setDbStatus('connected');
                     setTimeout(() => setDbStatus('idle'), 3000);
                 } catch (err) {
@@ -117,8 +138,11 @@
                 }
             };
 
+            // Simpan ke local storage setiap ada perubahan state
             useEffect(() => {
-                localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(articles));
+                if (articles.length > 0) {
+                    localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(articles));
+                }
             }, [articles]);
 
             const daysInMonth = useMemo(() => {
@@ -134,20 +158,26 @@
             }, [currentDate]);
 
             const changeMonth = (offset) => {
-                const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1);
-                setCurrentDate(newDate);
+                setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1));
             };
 
             const calculateMetrics = (art) => {
                 let online = 0, offline = 0;
-                Object.values(art.arrivals || {}).forEach(d => {
-                    online += (parseInt(d.online) || 0);
-                    offline += (parseInt(d.offline) || 0);
-                });
+                if (art.arrivals) {
+                    Object.values(art.arrivals).forEach(d => {
+                        online += (parseInt(d.online) || 0);
+                        offline += (parseInt(d.offline) || 0);
+                    });
+                }
                 const total = online + offline;
                 const percentage = art.qtyPo > 0 ? (total / art.qtyPo) * 100 : 0;
                 return { online, offline, total, percentage };
             };
+
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
+            const [formArticle, setFormArticle] = useState({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
+            const [formArrival, setFormArrival] = useState({ targetPo: '', date: toLocalDateString(new Date()), color: '', size: '', online: 0, offline: 0 });
 
             const handleSaveArticle = () => {
                 if (!formArticle.noPo || !formArticle.brand || !formArticle.artikel) return;
@@ -223,14 +253,13 @@
                                     <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] flex items-center gap-2">
                                         PT. NAD INTI DISTRIBUSI 
                                         <span className={`px-2 py-0.5 rounded-full text-[8px] border transition-all ${dbStatus === 'connected' ? 'border-emerald-200 text-emerald-600 bg-emerald-50' : (dbStatus === 'syncing' ? 'border-indigo-200 text-indigo-600 bg-indigo-50 animate-pulse' : 'border-slate-200 text-slate-400')}`}>
-                                            {dbStatus === 'syncing' ? 'MENGIRIM...' : dbStatus === 'connected' ? 'CLOUD SYNC OK' : 'LOCAL SAVED'}
+                                            {dbStatus === 'syncing' ? 'MENGIRIM...' : dbStatus === 'connected' ? 'SINKRONISASI OK' : (dbStatus === 'loading' ? 'LOADING...' : 'READY')}
                                         </span>
                                     </p>
                                 </div>
                             </div>
                             
                             <div className="flex flex-wrap items-center gap-3">
-                                {/* Navigasi Bulan */}
                                 <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm mr-2">
                                     <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"><Icon name="chevron-left" size={16}/></button>
                                     <span className="px-4 text-[10px] font-black uppercase text-slate-700 min-w-[120px] text-center">
@@ -243,11 +272,17 @@
                                     <button onClick={() => setView('dashboard')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Kalender</button>
                                     <button onClick={() => setView('recap')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase ${view === 'recap' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Rekap</button>
                                 </div>
-                                <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-800 text-slate-800 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-colors">
+                                
+                                <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-800 text-slate-800 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50">
                                     <Icon name="plus" size={14} /> Master PO
                                 </button>
-                                <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-black shadow-lg text-[10px] uppercase hover:bg-indigo-700 transition-colors">
-                                    <Icon name="truck" size={14} /> Input Arrival
+                                
+                                <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-black shadow-lg text-[10px] uppercase">
+                                    <Icon name="truck" size={14} /> Input Kedatangan
+                                </button>
+                                
+                                <button onClick={fetchDataFromSheets} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-600" title="Refresh Data">
+                                    <Icon name="refresh-cw" size={16} className={dbStatus === 'loading' ? 'animate-spin' : ''} />
                                 </button>
                             </div>
                         </div>
@@ -266,7 +301,7 @@
                                             <th rowSpan="3" className="w-20 border border-slate-700 p-3 bg-slate-800">Qty PO</th>
                                             {view === 'dashboard' ? (
                                                 <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center bg-slate-900">
-                                                    Arrival {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+                                                    Kedatangan {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
                                                 </th>
                                             ) : (
                                                 <>
@@ -297,7 +332,9 @@
                                     <tbody>
                                         {articles.length === 0 ? (
                                             <tr>
-                                                <td colSpan="100" className="p-20 text-center text-slate-300 font-black uppercase tracking-widest">Belum ada data artikel</td>
+                                                <td colSpan="100" className="p-20 text-center text-slate-300 font-black uppercase tracking-widest">
+                                                    {dbStatus === 'loading' ? 'Mengambil data dari server...' : 'Belum ada data artikel'}
+                                                </td>
                                             </tr>
                                         ) : (
                                             articles.map((art) => {
@@ -313,9 +350,10 @@
                                                         <td className="border border-slate-200 p-3 text-center font-bold bg-slate-50">{art.qtyPo}</td>
                                                         {view === 'dashboard' ? (
                                                             daysInMonth.map(date => {
-                                                                const d = art.arrivals[toLocalDateString(date)] || { online: 0, offline: 0 };
+                                                                const dateStr = toLocalDateString(date);
+                                                                const d = (art.arrivals && art.arrivals[dateStr]) || { online: 0, offline: 0 };
                                                                 return (
-                                                                    <React.Fragment key={`${art.id}-${date}`}>
+                                                                    <React.Fragment key={`${art.id}-${dateStr}`}>
                                                                         <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || ''}</td>
                                                                         <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || ''}</td>
                                                                     </React.Fragment>
@@ -351,24 +389,24 @@
                                 <div className="p-8 grid grid-cols-2 gap-5">
                                     <div className="col-span-1">
                                         <label className="text-[9px] font-black uppercase text-slate-400 ml-2">No. PO</label>
-                                        <input placeholder="PO-XXXX" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-indigo-600" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
+                                        <input placeholder="PO-XXXX" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
                                     </div>
                                     <div className="col-span-1">
                                         <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Tgl PO</label>
-                                        <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-indigo-600" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
+                                        <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
                                     </div>
                                     <div className="col-span-2">
                                         <SearchableDropdown label="Brand" options={BRAND_LIST} value={formArticle.brand} onChange={v => setFormArticle({...formArticle, brand: v})} placeholder="PILIH BRAND" />
                                     </div>
                                     <div className="col-span-2">
                                         <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Nama Artikel</label>
-                                        <input placeholder="ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-indigo-600" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
+                                        <input placeholder="ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
                                     </div>
                                     <div className="col-span-2">
                                         <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Qty Target</label>
-                                        <input type="number" className="w-full p-4 bg-emerald-50 border rounded-2xl font-black text-emerald-700 outline-emerald-600" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
+                                        <input type="number" className="w-full p-4 bg-emerald-50 border rounded-2xl font-black text-emerald-700" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
                                     </div>
-                                    <button onClick={handleSaveArticle} className="col-span-2 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg transition-all">Simpan Master & Sync</button>
+                                    <button onClick={handleSaveArticle} className="col-span-2 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg">Simpan & Sinkron ke Cloud</button>
                                 </div>
                             </div>
                         </div>
@@ -383,8 +421,7 @@
                                     <button onClick={() => setIsArrivalModalOpen(false)}><Icon name="x" size={20} /></button>
                                 </div>
                                 <div className="p-8 space-y-4">
-                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Pilih Master PO</label>
-                                    <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-xs outline-indigo-600" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
+                                    <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-xs" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
                                         <option value="">-- PILIH ARTIKEL --</option>
                                         {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} - {a.artikel}</option>)}
                                     </select>
@@ -392,19 +429,12 @@
                                         <SearchableDropdown label="Warna" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="WARNA" />
                                         <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="SIZE" />
                                     </div>
-                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 block">Tgl Kedatangan</label>
-                                    <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-indigo-600" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
+                                    <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[8px] font-black text-indigo-400 ml-2">QTY ONLINE</label>
-                                            <input type="number" placeholder="ONLINE" className="w-full p-4 border-2 border-indigo-50 rounded-2xl font-black text-center outline-indigo-600" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <label className="text-[8px] font-black text-amber-400 ml-2">QTY OFFLINE</label>
-                                            <input type="number" placeholder="OFFLINE" className="w-full p-4 border-2 border-amber-50 rounded-2xl font-black text-center outline-amber-600" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
-                                        </div>
+                                        <input type="number" placeholder="ONLINE" className="w-full p-4 border-2 border-indigo-50 rounded-2xl font-black text-center" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
+                                        <input type="number" placeholder="OFFLINE" className="w-full p-4 border-2 border-amber-50 rounded-2xl font-black text-center" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
                                     </div>
-                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg">Simpan Kedatangan & Sync</button>
+                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg">Update & Sinkron ke Cloud</button>
                                 </div>
                             </div>
                         </div>
