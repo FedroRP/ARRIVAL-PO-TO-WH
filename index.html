@@ -213,11 +213,11 @@
             };
 
             const exportToCSV = () => {
-                // Header sesuai permintaan: NOMOR PO, TGL, BRAND, ARTIKEL, COLOR, SIZE, QTY PO, ON, OFF, TOTAL, SISA
+                // Header: NOMOR PO, TGL, BRAND, ARTIKEL, COLOR, SIZE, QTY PO, ON, OFF, TOTAL, SISA
                 const headers = "NOMOR PO,TGL,BRAND,ARTIKEL,COLOR,SIZE,QTY PO,ON,OFF,TOTAL,SISA";
                 
                 const rows = articles.map(a => {
-                    const m = calculateMetrics(a);
+                    const m = calculateMetrics(a); // Hitung total on/off dari seluruh rincian kedatangan
                     const rowData = [
                         `"${a.noPo}"`,
                         `"${a.tglPo}"`,
@@ -226,10 +226,10 @@
                         `"${a.color}"`,
                         `"${a.size}"`,
                         a.qtyPo,
-                        m.online,
-                        m.offline,
-                        m.total,
-                        m.sisa
+                        m.online,  // Total ON (Hasil akumulasi seluruh tanggal)
+                        m.offline, // Total OFF (Hasil akumulasi seluruh tanggal)
+                        m.total,   // ON + OFF
+                        m.sisa     // QTY PO - Total
                     ];
                     return rowData.join(",");
                 }).join("\n");
