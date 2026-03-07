@@ -53,7 +53,7 @@
         ];
 
         const SIZE_LIST = [
-            "L", "XL", "LX", "S", "SX", "M", "ALL SIZE", "SQUARE", "MEDIUM", 
+            "L", "XL", "LX", "S", "SX", "XL", "M", "XL", "ALL SIZE", "SQUARE", "MEDIUM", 
             "36", "37", "38", "39", "40", "41", "MINI", "WALLET", "50 ML", "80 GR", 
             "10 GR", "28", "29", "30", "31", "32", "33", "34", "115 CM", "6", "12", "8", "4", "10"
         ];
@@ -468,8 +468,8 @@
                                                             const d = art.arrivals[key] || { online: 0, offline: 0 };
                                                             return (
                                                                 <React.Fragment key={`${art.id}-${key}`}>
-                                                                    <td className={`border border-slate-100 p-1 text-center font-bold ${d.online ? 'text-indigo-600 bg-indigo-50/10' : 'text-slate-300'}`}>{d.online || '-'}</td>
-                                                                    <td className={`border border-slate-100 p-1 text-center font-bold ${d.offline ? 'text-amber-600 bg-amber-50/10' : 'text-slate-300'}`}>{d.offline || '-'}</td>
+                                                                    <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || '-'}</td>
+                                                                    <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || '-'}</td>
                                                                 </React.Fragment>
                                                             );
                                                         })
@@ -554,6 +554,7 @@
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
+                                        {/* Color Dropdown */}
                                         <SearchableDropdown 
                                             label="Color"
                                             options={COLOR_LIST}
@@ -561,6 +562,8 @@
                                             onChange={(val) => setFormArrival({...formArrival, color: val})}
                                             placeholder="CARI WARNA..."
                                         />
+
+                                        {/* Size Dropdown */}
                                         <SearchableDropdown 
                                             label="Size"
                                             options={SIZE_LIST}
