@@ -28,8 +28,8 @@
     <script type="text/babel">
         const { useState, useMemo, useEffect, useRef } = React;
 
-        // URL GOOGLE APPS SCRIPT
-        const SPREADSHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwvv5Op0SHL3PODTm602j7g_KlgCiOO7AiZ3Pa1eppMEln6G_cGgJTURHQ4nQISLPUw/exec"; 
+        // URL GOOGLE APPS SCRIPT BARU
+        const SPREADSHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyBanLrYC5qrAN1E6c0Gy8zMIkZfPt9RJrhb1N5-hV4-NYWR9zPeM4MdIHcHcTmpZ1M/exec"; 
 
         const BRAND_LIST = ["HEYMALE", "PREPSTUDIO", "ZOMA BASIC", "HEYLOCAL", "SHUWA MODEST", "BOONABOO", "ANSHARIYA", "NOSTALGY"];
         const COLOR_LIST = ["ROSETTE", "SYCAMORE", "BLACK", "COLE", "BLUSH", "CLAY", "DAISY", "FLOYD", "GARNET", "JET BLACK", "POWDER", "IVORY", "BROWN", "NAVY", "GREY", "MIDNIGHT", "WHITE", "ASH GREY", "CARAMEL", "CASHMERE", "SAGE GREEN", "SAND", "VIOLET", "BUTTERSCOTCH", "CHARCOAL", "BEIGE", "COFFEE", "LIGHT TAUPE", "CREAM", "CANYON", "COASTAL", "LINEN", "ONYX", "PEONY", "ROYAL", "SEPHIA", "GOLD", "NUDE", "VANILLA", "LATTE", "BURGUNDY", "CHOCO", "TAUPE", "CORAL", "TEAL", "SAGE", "TERRACOTA", "GREIGE", "JADE", "PORCELAIN", "ROSEAT", "TRUFFLE", "FOREST", "LEAF", "SEASALT", "SUNDIAL", "STARLIGHT", "BLUE", "DENIM", "LIGHT GREY", "SKY BLUE", "ARMY", "DARK GREY", "MOCCA", "WINE", "DARK BLUE", "KELP", "OATMEAL", "DARK OLIVE", "MUSTARD", "OXIDE", "VERDIGN", "KHAKI", "RED WINE", "DARK BROWN", "FOREST GREEN", "GREEN", "MISTY", "PURPLE", "RED", "SEAGREEN", "YELLOW", "TAN", "CYAN", "LIGHT BLUE", "OLIVE", "STONE", "HAZELNUT", "ALL COLOUR", "DARK DENIM", "DARK CHOCO"];
@@ -89,12 +89,12 @@
             const [currentDate, setCurrentDate] = useState(new Date());
             const [articles, setArticles] = useState([]);
 
-            // Load Data with enhanced error handling
+            // Load Data
             const fetchDataFromSheets = async () => {
                 setDbStatus('loading');
                 try {
                     const response = await fetch(`${SPREADSHEET_WEB_APP_URL}?action=read`);
-                    const text = await response.text(); // Get raw text first to debug
+                    const text = await response.text();
                     
                     try {
                         const result = JSON.parse(text);
@@ -103,19 +103,17 @@
                             localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(result));
                             setDbStatus('connected');
                         } else {
-                            // If it's valid JSON but not an array (e.g., empty or error msg)
                             setArticles([]);
                             setDbStatus('connected');
                         }
                     } catch (jsonErr) {
-                        // If response is "Action not found" or similar plain text
-                        console.warn("Script returned non-JSON response:", text);
+                        console.warn("Response bukan JSON valid:", text);
                         const saved = localStorage.getItem('inventory_data_2026_fixed');
                         if (saved) setArticles(JSON.parse(saved));
                         setDbStatus('error');
                     }
                 } catch (err) {
-                    console.error("Network Fetch Error:", err);
+                    console.error("Fetch Error:", err);
                     const saved = localStorage.getItem('inventory_data_2026_fixed');
                     if (saved) setArticles(JSON.parse(saved));
                     setDbStatus('error');
@@ -130,7 +128,7 @@
                 setDbStatus('syncing');
                 try {
                     const payload = encodeURIComponent(JSON.stringify(latestData));
-                    // Using redirect: 'follow' is standard, but Apps Script 'sync' usually returns text
+                    // Menggunakan no-cors untuk menghindari isu pre-flight Apps Script saat proses sync
                     await fetch(`${SPREADSHEET_WEB_APP_URL}?action=sync&data=${payload}`, { 
                         method: 'GET',
                         mode: 'no-cors' 
