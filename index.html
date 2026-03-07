@@ -53,7 +53,6 @@
             const [search, setSearch] = useState('');
             const [isOpen, setIsOpen] = useState(false);
             const dropdownRef = useRef(null);
-
             const filteredOptions = useMemo(() => options.filter(opt => opt.toUpperCase().includes(search.toUpperCase())), [options, search]);
 
             useEffect(() => {
@@ -72,7 +71,7 @@
                     {isOpen && (
                         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[110] overflow-hidden animate-fade-in">
                             <div className="p-3 border-b bg-slate-50 sticky top-0">
-                                <input autoFocus className="w-full px-4 py-2 bg-white border rounded-xl text-[10px] uppercase font-bold outline-none" placeholder="SEARCH..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                                <input autoFocus className="w-full px-4 py-2 bg-white border rounded-xl text-[10px] uppercase font-bold outline-none" placeholder="CARI..." value={search} onChange={(e) => setSearch(e.target.value)} />
                             </div>
                             <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
                                 {filteredOptions.map(opt => (
@@ -93,6 +92,7 @@
             const [filterBrand, setFilterBrand] = useState('');
             const [filterArtikel, setFilterArtikel] = useState('');
             const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); 
+            
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [isEditModalOpen, setIsEditModalOpen] = useState(false);
             const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
@@ -105,6 +105,7 @@
             const authRef = useRef(null);
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'inventory-tracker-v1';
 
+            // ATURAN 3: Inisialisasi Auth & Firebase
             useEffect(() => {
                 const firebaseConfig = JSON.parse(__firebase_config);
                 const app = initializeApp(firebaseConfig);
@@ -118,21 +119,32 @@
                         } else {
                             await signInAnonymously(authRef.current);
                         }
-                    } catch (e) { console.error("Auth error", e); }
+                    } catch (e) { 
+                        console.error("Auth Error:", e);
+                        setLoading(false);
+                    }
                 };
                 initAuth();
-                const unsubscribe = onAuthStateChanged(authRef.current, setUser);
+                const unsubscribe = onAuthStateChanged(authRef.current, (u) => {
+                    setUser(u);
+                    if (!u) setLoading(false);
+                });
                 return () => unsubscribe();
             }, []);
 
+            // ATURAN 1 & 2: Fetching Data dengan Path yang Benar
             useEffect(() => {
                 if (!user || !dbRef.current) return;
-                const q = query(collection(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory'));
+                
+                // Menggunakan path /artifacts/{appId}/public/data/inventory
+                const inventoryCol = collection(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory');
+                const q = query(inventoryCol);
+                
                 const unsubscribe = onSnapshot(q, (snapshot) => {
                     setArticles(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                     setLoading(false);
                 }, (error) => {
-                    console.error("Firestore error", error);
+                    console.error("Firestore Error:", error);
                     setLoading(false);
                 });
                 return () => unsubscribe();
@@ -158,70 +170,78 @@
             const handleSaveArticle = async () => {
                 if (!user || !formArticle.noPo || !formArticle.brand || !formArticle.artikel) return;
                 const newId = Date.now().toString();
-                await setDoc(doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', newId), {
-                    ...formArticle,
-                    noPo: formArticle.noPo.toUpperCase(),
-                    artikel: formArticle.artikel.toUpperCase(),
-                    color: '-', size: '-', arrivals: {}
-                });
-                setIsModalOpen(false);
-                setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
+                try {
+                    await setDoc(doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', newId), {
+                        ...formArticle,
+                        noPo: formArticle.noPo.toUpperCase(),
+                        artikel: formArticle.artikel.toUpperCase(),
+                        color: '-', size: '-', arrivals: {}
+                    });
+                    setIsModalOpen(false);
+                    setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
+                } catch (e) { console.error("Save Error:", e); }
             };
 
             const handleUpdateArticle = async () => {
                 if (!user || !editData) return;
-                await updateDoc(doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', editData.id), {
-                    ...editData,
-                    noPo: editData.noPo.toUpperCase(),
-                    artikel: editData.artikel.toUpperCase()
-                });
-                setIsEditModalOpen(false);
+                try {
+                    await updateDoc(doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', editData.id), {
+                        ...editData,
+                        noPo: editData.noPo.toUpperCase(),
+                        artikel: editData.artikel.toUpperCase()
+                    });
+                    setIsEditModalOpen(false);
+                } catch (e) { console.error("Update Error:", e); }
             };
 
             const handleDeleteArticle = async (id) => {
                 if (!user) return;
-                await deleteDoc(doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', id));
+                try {
+                    await deleteDoc(doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', id));
+                } catch (e) { console.error("Delete Error:", e); }
             };
 
             const handleUpdateArrival = async () => {
                 if (!user || !formArrival.targetPoId || !formArrival.color || !formArrival.size) return;
-                const parentArt = articles.find(a => a.id === formArrival.targetPoId);
-                const inputColor = formArrival.color.toUpperCase();
-                const inputSize = formArrival.size.toUpperCase();
-                
-                const existingVarian = articles.find(a => 
-                    a.noPo === parentArt.noPo && a.artikel === parentArt.artikel && 
-                    a.color === inputColor && a.size === inputSize
-                );
+                try {
+                    const parentArt = articles.find(a => a.id === formArrival.targetPoId);
+                    const inputColor = formArrival.color.toUpperCase();
+                    const inputSize = formArrival.size.toUpperCase();
+                    
+                    const existingVarian = articles.find(a => 
+                        a.noPo === parentArt.noPo && a.artikel === parentArt.artikel && 
+                        a.color === inputColor && a.size === inputSize
+                    );
 
-                const targetDocId = existingVarian ? existingVarian.id : (parentArt.color === '-' ? parentArt.id : Date.now().toString());
-                const targetData = existingVarian || (parentArt.color === '-' ? parentArt : { ...parentArt, color: inputColor, size: inputSize, arrivals: {} });
-                
-                const updatedArrivals = { ...(targetData.arrivals || {}) };
-                const dateKey = formArrival.date;
-                const currentDay = updatedArrivals[dateKey] || { online: 0, offline: 0 };
-                
-                updatedArrivals[dateKey] = {
-                    online: (Number(currentDay.online) || 0) + (Number(formArrival.online) || 0),
-                    offline: (Number(currentDay.offline) || 0) + (Number(formArrival.offline) || 0)
-                };
+                    const targetDocId = existingVarian ? existingVarian.id : (parentArt.color === '-' ? parentArt.id : Date.now().toString());
+                    const targetData = existingVarian || (parentArt.color === '-' ? parentArt : { ...parentArt, color: inputColor, size: inputSize, arrivals: {} });
+                    
+                    const updatedArrivals = { ...(targetData.arrivals || {}) };
+                    const dateKey = formArrival.date;
+                    const currentDay = updatedArrivals[dateKey] || { online: 0, offline: 0 };
+                    
+                    updatedArrivals[dateKey] = {
+                        online: (Number(currentDay.online) || 0) + (Number(formArrival.online) || 0),
+                        offline: (Number(currentDay.offline) || 0) + (Number(formArrival.offline) || 0)
+                    };
 
-                await setDoc(doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', targetDocId), {
-                    ...targetData,
-                    id: targetDocId,
-                    color: inputColor,
-                    size: inputSize,
-                    arrivals: updatedArrivals
-                });
+                    await setDoc(doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', targetDocId), {
+                        ...targetData,
+                        id: targetDocId,
+                        color: inputColor,
+                        size: inputSize,
+                        arrivals: updatedArrivals
+                    });
 
-                setIsArrivalModalOpen(false);
-                setFormArrival({ ...formArrival, color: '', size: '', online: 0, offline: 0 });
+                    setIsArrivalModalOpen(false);
+                    setFormArrival({ ...formArrival, color: '', size: '', online: 0, offline: 0 });
+                } catch (e) { console.error("Arrival Error:", e); }
             };
 
             if (loading) return (
                 <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-                    <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p className="font-black text-[10px] uppercase tracking-widest text-slate-400">Menghubungkan ke Cloud...</p>
+                    <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p className="font-black text-[10px] uppercase tracking-widest text-slate-400">Menyambungkan ke Sistem Cloud...</p>
                 </div>
             );
 
@@ -240,8 +260,8 @@
                             </div>
                             <div className="flex flex-wrap items-center gap-3">
                                 <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-                                    <button onClick={() => setView('dashboard')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Kalender</button>
-                                    <button onClick={() => setView('recap')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Rekap</button>
+                                    <button onClick={() => setView('dashboard')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Kalender</button>
+                                    <button onClick={() => setView('recap')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Rekap</button>
                                 </div>
                                 <div className="flex items-center bg-white border rounded-xl overflow-hidden shadow-sm">
                                     <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 border-r hover:bg-slate-50"><Icon name="chevron-left" size={16}/></button>
@@ -281,7 +301,7 @@
                                             <th rowSpan="3" className="border border-slate-700 p-3 bg-slate-900">SIZE</th>
                                             <th rowSpan="3" className="border border-slate-700 p-3 bg-slate-900">QTY PO</th>
                                             {view === 'dashboard' ? (
-                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center uppercase tracking-widest bg-slate-800 italic">Data Kedatangan Produk</th>
+                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center uppercase tracking-widest bg-slate-800 italic">Data Monitoring Kedatangan</th>
                                             ) : (
                                                 <>
                                                     <th rowSpan="3" className="border border-slate-700 p-3 bg-indigo-900">ONLINE</th>
@@ -367,33 +387,18 @@
                         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden animate-fade-in shadow-2xl">
                                 <div className="bg-indigo-600 p-8 text-white flex justify-between items-center">
-                                    <div>
-                                        <h3 className="font-black uppercase text-lg leading-none">Artikel Master</h3>
-                                        <p className="text-indigo-200 text-[10px] mt-1 uppercase font-bold tracking-widest">Tambah Data PO Baru</p>
-                                    </div>
-                                    <button onClick={() => setIsModalOpen(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all"><Icon name="x"/></button>
+                                    <h3 className="font-black uppercase text-lg leading-none">Artikel Master Baru</h3>
+                                    <button onClick={() => setIsModalOpen(false)} className="bg-white/10 p-2 rounded-full"><Icon name="x"/></button>
                                 </div>
                                 <div className="p-8 space-y-5">
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">No. Purchase Order</label>
-                                        <input placeholder="CONTOH: PO/HEY/2026/001" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-none focus:border-indigo-600" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
-                                    </div>
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Brand</label>
-                                        <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-none focus:border-indigo-600" value={formArticle.brand} onChange={e => setFormArticle({...formArticle, brand: e.target.value})}>
-                                            <option value="">PILIH BRAND</option>
-                                            {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Nama Artikel</label>
-                                        <input placeholder="NAMA PRODUK" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-none focus:border-indigo-600" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
-                                    </div>
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Quantity PO</label>
-                                        <input type="number" placeholder="JUMLAH TOTAL PESANAN" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none focus:border-indigo-600" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: Number(e.target.value)})} />
-                                    </div>
-                                    <button onClick={handleSaveArticle} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all">Simpan ke Database</button>
+                                    <input placeholder="NO PO" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-none focus:border-indigo-600" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
+                                    <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-none focus:border-indigo-600" value={formArticle.brand} onChange={e => setFormArticle({...formArticle, brand: e.target.value})}>
+                                        <option value="">PILIH BRAND</option>
+                                        {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
+                                    </select>
+                                    <input placeholder="ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-none focus:border-indigo-600" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
+                                    <input type="number" placeholder="QTY PO" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none focus:border-indigo-600" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: Number(e.target.value)})} />
+                                    <button onClick={handleSaveArticle} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-indigo-200">Simpan ke Cloud</button>
                                 </div>
                             </div>
                         </div>
@@ -402,52 +407,38 @@
                     {/* MODAL ARRIVAL */}
                     {isArrivalModalOpen && (
                         <div className="fixed inset-0 bg-indigo-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white rounded-[2.5rem] w-full max-w-xl overflow-hidden animate-fade-in shadow-2xl border-4 border-indigo-600/10">
-                                <div className="p-8 border-b bg-indigo-50/50 flex justify-between items-center text-indigo-700">
-                                    <div>
-                                        <h3 className="font-black uppercase text-sm tracking-widest">Input Kedatangan Produk</h3>
-                                        <p className="text-[9px] font-bold opacity-60">Pilih Artikel Master untuk menambah varian</p>
-                                    </div>
-                                    <button onClick={() => setIsArrivalModalOpen(false)} className="bg-indigo-100 p-2 rounded-full"><Icon name="x" size={20}/></button>
+                            <div className="bg-white rounded-[2.5rem] w-full max-w-xl overflow-hidden animate-fade-in shadow-2xl">
+                                <div className="p-8 border-b bg-indigo-50 flex justify-between items-center text-indigo-700">
+                                    <h3 className="font-black uppercase text-sm tracking-widest">Input Kedatangan Produk</h3>
+                                    <button onClick={() => setIsArrivalModalOpen(false)}><Icon name="x" size={20}/></button>
                                 </div>
                                 <div className="p-8 space-y-6">
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Pilih Artikel Master</label>
-                                        <select className="w-full p-4 bg-indigo-50 border-2 border-indigo-100 rounded-2xl font-black text-xs outline-none" value={formArrival.targetPoId} onChange={e => setFormArrival({...formArrival, targetPoId: e.target.value})}>
-                                            <option value="">-- PILIH ARTIKEL MASTER --</option>
-                                            {articles.filter(a => a.color === '-').map(a => <option key={a.id} value={a.id}>{a.noPo} | {a.artikel} ({a.brand})</option>)}
-                                        </select>
-                                    </div>
+                                    <select className="w-full p-4 bg-indigo-50 border-2 border-indigo-100 rounded-2xl font-black text-xs outline-none" value={formArrival.targetPoId} onChange={e => setFormArrival({...formArrival, targetPoId: e.target.value})}>
+                                        <option value="">-- PILIH ARTIKEL MASTER --</option>
+                                        {articles.filter(a => a.color === '-').map(a => <option key={a.id} value={a.id}>{a.noPo} | {a.artikel}</option>)}
+                                    </select>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <SearchableDropdown label="Warna Produk" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="CARI WARNA..."/>
-                                        <SearchableDropdown label="Ukuran/Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="CARI SIZE..."/>
+                                        <SearchableDropdown label="Warna" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="CARI WARNA..."/>
+                                        <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="CARI SIZE..."/>
                                     </div>
+                                    <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold text-xs" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal Kedatangan</label>
-                                            <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold text-xs" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Lokasi (Opsional)</label>
-                                            <div className="flex items-center p-4 bg-slate-50 border rounded-2xl text-[10px] font-black text-slate-300">WAREHOUSE A</div>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-indigo-50 p-6 rounded-[2rem] border-2 border-indigo-100">
-                                            <label className="text-[9px] font-black uppercase text-indigo-400 mb-2 block text-center">Qty Online</label>
+                                        <div className="bg-indigo-50 p-6 rounded-2xl border-2 border-indigo-100">
+                                            <label className="text-[9px] font-black uppercase text-indigo-400 mb-2 block text-center">Online</label>
                                             <input type="number" className="w-full bg-transparent text-center font-black text-2xl text-indigo-700 outline-none" placeholder="0" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
                                         </div>
-                                        <div className="bg-amber-50 p-6 rounded-[2rem] border-2 border-amber-100">
-                                            <label className="text-[9px] font-black uppercase text-amber-400 mb-2 block text-center">Qty Offline</label>
+                                        <div className="bg-amber-50 p-6 rounded-2xl border-2 border-amber-100">
+                                            <label className="text-[9px] font-black uppercase text-amber-400 mb-2 block text-center">Offline</label>
                                             <input type="number" className="w-full bg-transparent text-center font-black text-2xl text-amber-700 outline-none" placeholder="0" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
                                         </div>
                                     </div>
-                                    <button onClick={handleUpdateArrival} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-2xl hover:scale-[1.02] transition-all active:scale-95">Simpan Data Kedatangan</button>
+                                    <button onClick={handleUpdateArrival} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-2xl">Simpan Data</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
+                    {/* MODAL EDIT */}
                     {isEditModalOpen && editData && (
                         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl">
@@ -455,31 +446,15 @@
                                     <h3 className="font-black uppercase tracking-widest">Update Data Artikel</h3>
                                     <button onClick={() => setIsEditModalOpen(false)}><Icon name="x"/></button>
                                 </div>
-                                <div className="p-8 grid grid-cols-2 gap-4">
-                                    <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">No. PO</label>
-                                        <input className="w-full p-4 border bg-slate-50 rounded-2xl font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value})} />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Artikel</label>
-                                        <input className="w-full p-4 border bg-slate-50 rounded-2xl font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value})} />
-                                    </div>
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Warna</label>
+                                <div className="p-8 space-y-4">
+                                    <input className="w-full p-4 border bg-slate-50 rounded-2xl font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value})} />
+                                    <input className="w-full p-4 border bg-slate-50 rounded-2xl font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value})} />
+                                    <div className="grid grid-cols-2 gap-4">
                                         <input className="w-full p-4 border bg-slate-50 rounded-2xl font-bold uppercase" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} />
-                                    </div>
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Size</label>
                                         <input className="w-full p-4 border bg-slate-50 rounded-2xl font-bold uppercase" value={editData.size} onChange={e => setEditData({...editData, size: e.target.value})} />
                                     </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Target Qty PO</label>
-                                        <input type="number" className="w-full p-4 border bg-slate-50 rounded-2xl font-bold" value={editData.qtyPo} onChange={e => setEditData({...editData, qtyPo: Number(e.target.value)})} />
-                                    </div>
-                                    <div className="col-span-2 pt-4 flex gap-4">
-                                        <button onClick={() => setIsEditModalOpen(false)} className="flex-1 p-4 rounded-xl font-bold uppercase text-xs text-slate-400">Batal</button>
-                                        <button onClick={handleUpdateArticle} className="flex-1 p-4 bg-blue-600 text-white rounded-xl font-black uppercase text-xs shadow-lg shadow-blue-200">Simpan Perubahan</button>
-                                    </div>
+                                    <input type="number" className="w-full p-4 border bg-slate-50 rounded-2xl font-bold" value={editData.qtyPo} onChange={e => setEditData({...editData, qtyPo: Number(e.target.value)})} />
+                                    <button onClick={handleUpdateArticle} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-[11px] shadow-lg">Simpan Perubahan</button>
                                 </div>
                             </div>
                         </div>
