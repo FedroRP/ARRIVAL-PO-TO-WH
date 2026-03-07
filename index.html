@@ -10,11 +10,6 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
-
     <style>
         .overflow-x-auto::-webkit-scrollbar { height: 8px; }
         .overflow-x-auto::-webkit-scrollbar-track { background: #f1f5f9; }
@@ -31,48 +26,41 @@
 <body class="bg-slate-50">
     <div id="root"></div>
 
+    <!-- Firebase SDKs via ESM -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Expose Firebase to window for Babel script
+        window.FirebaseSDK = {
+            initializeApp, getAuth, signInAnonymously, onAuthStateChanged, 
+            signInWithCustomToken, getFirestore, doc, setDoc, onSnapshot, 
+            collection, query, deleteDoc, updateDoc
+        };
+    </script>
+
     <script type="text/babel">
         const { useState, useMemo, useEffect, useRef } = React;
-
-        // --- FIREBASE CONFIGURATION ---
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore(app);
-        const auth = firebase.auth(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-inventory-tracker';
         
-        // Firestore Path Rule 1
-        const collectionPath = `artifacts/${appId}/public/data/inventory_articles`;
+        // Helper to wait for Firebase SDK exposure
+        const useFirebase = () => {
+            const [sdk, setSdk] = useState(window.FirebaseSDK);
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    if (window.FirebaseSDK) {
+                        setSdk(window.FirebaseSDK);
+                        clearInterval(interval);
+                    }
+                }, 100);
+                return () => clearInterval(interval);
+            }, []);
+            return sdk;
+        };
 
-        const BRAND_LIST = [
-            "HEYMALE", "PREPSTUDIO", "ZOMA BASIC", "HEYLOCAL", 
-            "SHUWA MODEST", "BOONABOO", "ANSHARIYA", "NOSTALGY"
-        ];
-
-        const COLOR_LIST = [
-            "ROSETTE", "SYCAMORE", "SCYMORE", "BLACK", "COLE", "BLUSH", "CLAY", "DAISY", "FLOYD", "GARNET", 
-            "JET BLACK", "POWDER", "IVORY", "BROWN", "FADED BLUE", "MAROON", "NAVY", "GREY", "MIDNIGHT", "WHITE", 
-            "ASH GREY", "CARAMEL", "CASHMERE", "DEEP MAUVE", "SAGE GREEN", "SAND", "VIOLET", "BUTTERSCOTCH", 
-            "CHARCOAL", "GRASSHOPPER", "OAT", "SEA FOAM", "BEIGE", "COFFEE", "LIGHT TAUPE", "CREAM", "CANYON", 
-            "COASTAL", "LINEN", "ONYX", "PEONY", "ROYAL", "SEPHIA", "GOLD", "NUDE", "VANILLA", "LATTE", "BURGUNDY", 
-            "CHOCO", "TAUPE", "CORAL", "TEAL", "SAGE", "TERRACOTA", "GREIGE", "JADE", "PORCELAIN", "ROSEAT", "TRUFFLE", 
-            "FOREST", "LEAF", "SEASALT", "SUNDIAL", "STARLIGHT", "BLUE", "DENIM", "LIGHT GREY", "SKY BLUE", "ARMY", 
-            "DARK GREY", "LIGHT BROWN", "MOCCA", "WINE", "DARK BLUE", "KELP", "OATMEAL", "DARK OLIVE", "MUSTARD", 
-            "OXIDE", "VERDIGN", "KHAKI", "RED WINE", "DARK BROWN", "BROWN VILLET", "TWO TONE BROWN", "TWO TONE GREY", 
-            "FOREST GREEN", "GREEN", "MISTY", "PURPLE", "RED", "BLACK WHITE", "BLACK YELLOW", "SEAGREEN", "YELLOW", 
-            "TAN", "CYAN", "LIGHT BLUE", "NAVY GREY", "NAVY TONAL", "INDIGO WHITE", "MIDNIGHT BLUE", "BLACK GREY", 
-            "BLUE BLACK", "BLUE GREEN TEAL", "CRIMSON NAVY", "GREY WHITE", "NAVY WHITE", "OLIVE", "STONE", "HAZELNUT", 
-            "ALL COLOUR", "KOPI PRAMUKA", "ABU TUA", "STEEL BLUE", "CRINKLE GREY", "CRINKLE BLUE", "CRINKLE BLACK", 
-            "BLUE-WHITE", "BLACK-WHITE", "WHITE-BLACK", "OFF WHITE", "TOFFEE", "BLUE-NAVY", "NAVY-GREEN", "GREY-BLACK", 
-            "TERRACOTA-BLACK", "DEEP TAUPE", "BROKEN WHITE", "GREY BROWN", "TWO TONE BLACK", "DENIM LOOK", "TOFFE", 
-            "KHAKY", "SMOKE", "ESPRESSO", "LEATHERS - XXL", "EXTENDER", "DARK DENIM", "DARK CHOCO"
-        ];
-
-        const SIZE_LIST = [
-            "L", "XL", "LX", "S", "SX", "XL", "M", "XL", "ALL SIZE", "SQUARE", "MEDIUM", 
-            "36", "37", "38", "39", "40", "41", "MINI", "WALLET", "50 ML", "80 GR", 
-            "10 GR", "28", "29", "30", "31", "32", "33", "34", "115 CM", "6", "12", "8", "4", "10"
-        ];
+        const BRAND_LIST = ["HEYMALE", "PREPSTUDIO", "ZOMA BASIC", "HEYLOCAL", "SHUWA MODEST", "BOONABOO", "ANSHARIYA", "NOSTALGY"];
+        const COLOR_LIST = ["ROSETTE", "SYCAMORE", "BLACK", "COLE", "BLUSH", "CLAY", "DAISY", "FLOYD", "GARNET", "JET BLACK", "POWDER", "IVORY", "BROWN", "MAROON", "NAVY", "GREY", "WHITE", "ASH GREY", "CARAMEL", "CASHMERE", "SAGE GREEN", "SAND", "CHARCOAL", "OAT", "BEIGE", "COFFEE", "CREAM", "ONYX", "PEONY", "GOLD", "VANILLA", "LATTE", "BURGUNDY", "CHOCO", "TAUPE", "CORAL", "TEAL", "SAGE", "TERRACOTA", "GREIGE", "JADE", "FOREST", "BLUE", "DENIM", "ARMY", "MOCCA", "WINE", "OATMEAL", "MUSTARD", "KHAKI", "PURPLE", "RED", "TAN", "OFF WHITE", "DEEP TAUPE", "BROKEN WHITE"];
+        const SIZE_LIST = ["L", "XL", "S", "M", "ALL SIZE", "SQUARE", "MEDIUM", "36", "37", "38", "39", "40", "41", "MINI", "WALLET", "28", "29", "30", "31", "32", "33", "34"];
 
         const toLocalDateString = (date) => {
             const year = date.getFullYear();
@@ -82,11 +70,7 @@
         };
 
         const Icon = ({ name, size = 18, className = "" }) => {
-            useEffect(() => {
-                if (window.lucide) {
-                    window.lucide.createIcons();
-                }
-            }, [name]);
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
             return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
         };
 
@@ -95,14 +79,10 @@
             const [isOpen, setIsOpen] = useState(false);
             const dropdownRef = useRef(null);
 
-            const filteredOptions = useMemo(() => {
-                return options.filter(opt => opt.toUpperCase().includes(search.toUpperCase()));
-            }, [options, search]);
+            const filteredOptions = useMemo(() => options.filter(opt => opt.toUpperCase().includes(search.toUpperCase())), [options, search]);
 
             useEffect(() => {
-                const handleClickOutside = (e) => {
-                    if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
-                };
+                const handleClickOutside = (e) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false); };
                 document.addEventListener('mousedown', handleClickOutside);
                 return () => document.removeEventListener('mousedown', handleClickOutside);
             }, []);
@@ -110,48 +90,19 @@
             return (
                 <div className="relative" ref={dropdownRef}>
                     <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">{label}</label>
-                    <div 
-                        className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase text-xs cursor-pointer flex justify-between items-center"
-                        onClick={() => setIsOpen(!isOpen)}
-                    >
-                        <span className={value ? 'text-slate-900' : 'text-slate-400'}>
-                            {value || placeholder}
-                        </span>
+                    <div className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase text-xs cursor-pointer flex justify-between items-center" onClick={() => setIsOpen(!isOpen)}>
+                        <span className={value ? 'text-slate-900' : 'text-slate-400'}>{value || placeholder}</span>
                         <Icon name="chevron-down" size={14} className="text-slate-400" />
                     </div>
-                    
                     {isOpen && (
                         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[110] overflow-hidden animate-fade-in">
                             <div className="p-3 border-b bg-slate-50 sticky top-0">
-                                <div className="relative">
-                                    <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <input 
-                                        autoFocus
-                                        className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] uppercase font-bold outline-none focus:border-indigo-400"
-                                        placeholder="SEARCH..."
-                                        value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
-                                    />
-                                </div>
+                                <input autoFocus className="w-full px-4 py-2 bg-white border rounded-xl text-[10px] uppercase font-bold outline-none" placeholder="SEARCH..." value={search} onChange={(e) => setSearch(e.target.value)} />
                             </div>
                             <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
-                                {filteredOptions.length > 0 ? (
-                                    filteredOptions.map(opt => (
-                                        <div 
-                                            key={opt}
-                                            className="px-4 py-3 hover:bg-indigo-50 cursor-pointer text-[10px] font-black uppercase border-b border-slate-50 last:border-0"
-                                            onClick={() => {
-                                                onChange(opt);
-                                                setIsOpen(false);
-                                                setSearch('');
-                                            }}
-                                        >
-                                            {opt}
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="p-4 text-center text-slate-400 text-[10px] uppercase font-bold italic">Not found</div>
-                                )}
+                                {filteredOptions.map(opt => (
+                                    <div key={opt} className="px-4 py-3 hover:bg-indigo-50 cursor-pointer text-[10px] font-black uppercase border-b border-slate-50 last:border-0" onClick={() => { onChange(opt); setIsOpen(false); setSearch(''); }}>{opt}</div>
+                                ))}
                             </div>
                         </div>
                     )}
@@ -160,98 +111,75 @@
         };
 
         const App = () => {
+            const sdk = useFirebase();
             const [user, setUser] = useState(null);
+            const [articles, setArticles] = useState([]);
+            const [loading, setLoading] = useState(true);
             const [view, setView] = useState('dashboard');
             const [filterBrand, setFilterBrand] = useState('');
             const [filterPo, setFilterPo] = useState('');
             const [filterArtikel, setFilterArtikel] = useState('');
-            const [isLoading, setIsLoading] = useState(true);
-
-            const [articles, setArticles] = useState([]);
             const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); 
-            
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [isEditModalOpen, setIsEditModalOpen] = useState(false);
             const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
 
-            const [formArticle, setFormArticle] = useState({ 
-                noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0
-            });
+            const [formArticle, setFormArticle] = useState({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
+            const [editData, setEditData] = useState(null);
+            const [formArrival, setFormArrival] = useState({ targetPoId: '', date: toLocalDateString(new Date()), color: '', size: '', online: 0, offline: 0 });
 
-            const [editData, setEditData] = useState({
-                id: '', noPo: '', tglPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0
-            });
+            const dbRef = useRef(null);
+            const authRef = useRef(null);
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'inventory-tracker-v1';
 
-            const [formArrival, setFormArrival] = useState({
-                targetPo: '', 
-                date: toLocalDateString(new Date()), 
-                color: '', 
-                size: '', 
-                online: 0, 
-                offline: 0
-            });
-
-            // (1) Handle Authentication (Rule 3)
             useEffect(() => {
+                if (!sdk) return;
+
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = sdk.initializeApp(firebaseConfig);
+                authRef.current = sdk.getAuth(app);
+                dbRef.current = sdk.getFirestore(app);
+
                 const initAuth = async () => {
                     try {
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await auth.signInWithCustomToken(__initial_auth_token);
+                            await sdk.signInWithCustomToken(authRef.current, __initial_auth_token);
                         } else {
-                            await auth.signInAnonymously();
+                            await sdk.signInAnonymously(authRef.current);
                         }
-                    } catch (err) {
-                        console.error("Auth Error:", err);
-                    }
+                    } catch (e) { console.error("Auth error", e); }
                 };
                 initAuth();
-                const unsubscribe = auth.onAuthStateChanged(setUser);
-                return () => unsubscribe();
-            }, []);
+                return sdk.onAuthStateChanged(authRef.current, setUser);
+            }, [sdk]);
 
-            // (2) Handle Firestore Real-time Data (Rule 2)
             useEffect(() => {
-                if (!user) return;
-                setIsLoading(true);
-                
-                const unsubscribe = db.collection(collectionPath)
-                    .onSnapshot((snapshot) => {
-                        const data = snapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        }));
-                        setArticles(data);
-                        setIsLoading(false);
-                    }, (error) => {
-                        console.error("Firestore Error:", error);
-                        setIsLoading(false);
-                    });
-
+                if (!user || !sdk || !dbRef.current) return;
+                const q = sdk.query(sdk.collection(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory'));
+                const unsubscribe = sdk.onSnapshot(q, (snapshot) => {
+                    setArticles(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    setLoading(false);
+                }, (error) => {
+                    console.error("Firestore error", error);
+                    setLoading(false);
+                });
                 return () => unsubscribe();
-            }, [user]);
-
-            const uniquePos = useMemo(() => [...new Set(articles.map(a => a.noPo))].sort(), [articles]);
-
-            const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-            const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+            }, [user, sdk]);
 
             const daysInMonth = useMemo(() => {
                 const year = currentDate.getFullYear();
                 const month = currentDate.getMonth();
                 const date = new Date(year, month, 1);
                 const days = [];
-                while (date.getMonth() === month) {
-                    days.push(new Date(date));
-                    date.setDate(date.getDate() + 1);
-                }
+                while (date.getMonth() === month) { days.push(new Date(date)); date.setDate(date.getDate() + 1); }
                 return days;
             }, [currentDate]);
 
             const filteredArticles = useMemo(() => {
                 return articles.filter(art => {
-                    const matchBrand = filterBrand === '' || art.brand === filterBrand;
-                    const matchPo = filterPo === '' || art.noPo === filterPo;
-                    const matchArtikel = filterArtikel === '' || art.artikel.includes(filterArtikel.toUpperCase());
+                    const matchBrand = !filterBrand || art.brand === filterBrand;
+                    const matchPo = !filterPo || art.noPo === filterPo;
+                    const matchArtikel = !filterArtikel || (art.artikel && art.artikel.toUpperCase().includes(filterArtikel.toUpperCase()));
                     return matchBrand && matchPo && matchArtikel;
                 });
             }, [articles, filterBrand, filterPo, filterArtikel]);
@@ -260,272 +188,151 @@
                 let online = 0, offline = 0;
                 if (art.arrivals) {
                     Object.values(art.arrivals).forEach(d => {
-                        online += (parseInt(d.online) || 0);
-                        offline += (parseInt(d.offline) || 0);
+                        online += (Number(d.online) || 0);
+                        offline += (Number(d.offline) || 0);
                     });
                 }
                 const total = online + offline;
-                const percentage = art.qtyPo > 0 ? (total / art.qtyPo) * 100 : 0;
-                return { online, offline, total, percentage };
+                return { online, offline, total, percentage: art.qtyPo > 0 ? (total / art.qtyPo) * 100 : 0 };
             };
 
             const handleSaveArticle = async () => {
-                if (!user) return;
-                if (!formArticle.noPo || !formArticle.brand || !formArticle.artikel) return;
-                
-                const newEntry = {
+                if (!user || !formArticle.noPo || !formArticle.brand || !formArticle.artikel) return;
+                const newId = Date.now().toString();
+                await sdk.setDoc(sdk.doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', newId), {
+                    ...formArticle,
                     noPo: formArticle.noPo.toUpperCase(),
-                    tglPo: formArticle.tglPo,
-                    brand: formArticle.brand,
                     artikel: formArticle.artikel.toUpperCase(),
-                    qtyPo: parseInt(formArticle.qtyPo) || 0,
-                    color: '-', 
-                    size: '-',  
-                    arrivals: {},
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                };
-
-                try {
-                    await db.collection(collectionPath).add(newEntry);
-                    setIsModalOpen(false);
-                    setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
-                } catch (err) {
-                    console.error("Save Error:", err);
-                }
+                    color: '-', size: '-', arrivals: {}
+                });
+                setIsModalOpen(false);
+                setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
             };
 
             const handleUpdateArticle = async () => {
-                if (!user) return;
-                try {
-                    await db.collection(collectionPath).doc(editData.id).update({
-                        noPo: editData.noPo.toUpperCase(),
-                        tglPo: editData.tglPo,
-                        brand: editData.brand,
-                        artikel: editData.artikel.toUpperCase(),
-                        color: editData.color.toUpperCase(),
-                        size: editData.size.toUpperCase(),
-                        qtyPo: parseInt(editData.qtyPo) || 0
-                    });
-                    setIsEditModalOpen(false);
-                } catch (err) {
-                    console.error("Update Error:", err);
-                }
+                if (!user || !editData) return;
+                await sdk.updateDoc(sdk.doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', editData.id), {
+                    ...editData,
+                    noPo: editData.noPo.toUpperCase(),
+                    artikel: editData.artikel.toUpperCase()
+                });
+                setIsEditModalOpen(false);
             };
 
             const handleDeleteArticle = async (id) => {
                 if (!user) return;
-                const confirmDelete = window.confirm("Hapus data baris ini?");
-                if (confirmDelete) {
-                    try {
-                        await db.collection(collectionPath).doc(id).delete();
-                    } catch (err) {
-                        console.error("Delete Error:", err);
-                    }
-                }
+                await sdk.deleteDoc(sdk.doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', id));
             };
 
             const handleUpdateArrival = async () => {
-                if (!user || !formArrival.targetPo || !formArrival.color || !formArrival.size) {
-                    alert("Pilih Artikel, Color, dan Size!");
-                    return;
-                }
-
-                const targetId = formArrival.targetPo;
-                const articleToUpdate = articles.find(a => a.id === targetId);
+                if (!user || !formArrival.targetPoId || !formArrival.color || !formArrival.size) return;
+                const parentArt = articles.find(a => a.id === formArrival.targetPoId);
                 const inputColor = formArrival.color.toUpperCase();
                 const inputSize = formArrival.size.toUpperCase();
-                const arrivalDate = formArrival.date;
-
-                // Mencari apakah baris dengan kombinasi PO, Artikel, Warna, dan Size yang sama sudah ada
-                const existingEntry = articles.find(a => 
-                    a.noPo === articleToUpdate.noPo && 
-                    a.artikel === articleToUpdate.artikel && 
-                    a.color === inputColor && 
-                    a.size === inputSize
+                
+                const existingVarian = articles.find(a => 
+                    a.noPo === parentArt.noPo && a.artikel === parentArt.artikel && 
+                    a.color === inputColor && a.size === inputSize
                 );
 
-                try {
-                    if (existingEntry) {
-                        // Jika sudah ada, update datanya
-                        const updatedArrivals = { ...(existingEntry.arrivals || {}) };
-                        const existingDayData = updatedArrivals[arrivalDate] || { online: 0, offline: 0 };
-                        
-                        updatedArrivals[arrivalDate] = {
-                            online: (parseInt(existingDayData.online) || 0) + (parseInt(formArrival.online) || 0),
-                            offline: (parseInt(existingDayData.offline) || 0) + (parseInt(formArrival.offline) || 0)
-                        };
-                        
-                        await db.collection(collectionPath).doc(existingEntry.id).update({
-                            arrivals: updatedArrivals
-                        });
-                    } else if (articleToUpdate.color === '-' && articleToUpdate.size === '-') {
-                        // Jika baris master masih kosong warnanya, isi baris itu
-                        await db.collection(collectionPath).doc(targetId).update({
-                            color: inputColor,
-                            size: inputSize,
-                            arrivals: {
-                                [arrivalDate]: {
-                                    online: parseInt(formArrival.online) || 0,
-                                    offline: parseInt(formArrival.offline) || 0
-                                }
-                            }
-                        });
-                    } else {
-                        // Jika berbeda warna/size dari master yang sudah diisi, buat baris baru
-                        const newEntry = {
-                            noPo: articleToUpdate.noPo,
-                            tglPo: articleToUpdate.tglPo,
-                            brand: articleToUpdate.brand,
-                            artikel: articleToUpdate.artikel,
-                            qtyPo: articleToUpdate.qtyPo,
-                            color: inputColor,
-                            size: inputSize,
-                            arrivals: {
-                                [arrivalDate]: {
-                                    online: parseInt(formArrival.online) || 0,
-                                    offline: parseInt(formArrival.offline) || 0
-                                }
-                            },
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        };
-                        await db.collection(collectionPath).add(newEntry);
-                    }
+                const targetDocId = existingVarian ? existingVarian.id : (parentArt.color === '-' ? parentArt.id : Date.now().toString());
+                const targetData = existingVarian || (parentArt.color === '-' ? parentArt : { ...parentArt, color: inputColor, size: inputSize, arrivals: {} });
+                
+                const updatedArrivals = { ...(targetData.arrivals || {}) };
+                const dateKey = formArrival.date;
+                const currentDay = updatedArrivals[dateKey] || { online: 0, offline: 0 };
+                
+                updatedArrivals[dateKey] = {
+                    online: (Number(currentDay.online) || 0) + (Number(formArrival.online) || 0),
+                    offline: (Number(currentDay.offline) || 0) + (Number(formArrival.offline) || 0)
+                };
 
-                    setIsArrivalModalOpen(false);
-                    setFormArrival({ ...formArrival, color: '', size: '', online: 0, offline: 0 });
-                } catch (err) {
-                    console.error("Arrival Update Error:", err);
-                }
-            };
-
-            const handleExportCSV = () => {
-                if (articles.length === 0) return;
-                let csvContent = "NO PO,TGL PO,BRAND,ARTIKEL,COLOR,SIZE,QTY PO,ONLINE,OFFLINE,TOTAL,SISA\n";
-                articles.forEach(art => {
-                    const m = calculateMetrics(art);
-                    const balance = art.qtyPo - m.total;
-                    const row = [
-                        art.noPo, art.tglPo || '', art.brand, art.artikel, art.color, art.size, art.qtyPo,
-                        m.online, m.offline, m.total, balance
-                    ].map(val => `"${val}"`).join(",");
-                    csvContent += row + "\n";
+                await sdk.setDoc(sdk.doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'inventory', targetDocId), {
+                    ...targetData,
+                    id: targetDocId,
+                    color: inputColor,
+                    size: inputSize,
+                    arrivals: updatedArrivals
                 });
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement("a");
-                link.href = URL.createObjectURL(blob);
-                link.download = `Rekap_Inventory_${new Date().toLocaleDateString()}.csv`;
-                link.click();
+
+                setIsArrivalModalOpen(false);
+                setFormArrival({ ...formArrival, color: '', size: '', online: 0, offline: 0 });
             };
+
+            if (!sdk) return <div className="min-h-screen flex items-center justify-center font-black uppercase text-slate-400">Initializing SDK...</div>;
+            if (loading) return <div className="min-h-screen flex items-center justify-center font-black uppercase text-indigo-600">Loading Cloud Data...</div>;
 
             return (
-                <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
+                <div className="min-h-screen bg-slate-50 p-4 md:p-6 text-slate-900">
                     <div className="max-w-[98vw] mx-auto">
                         
                         {/* HEADER */}
                         <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             <div className="flex items-center gap-4">
-                                <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg text-white">
-                                    <Icon name="package-check" size={28} />
-                                </div>
+                                <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg text-white"><Icon name="package-check" size={28} /></div>
                                 <div>
-                                    <h1 className="text-2xl font-black uppercase tracking-tight leading-none mb-1 text-slate-800">Inventory Tracker 2026</h1>
-                                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em]">PT. NAD INTI DISTRIBUSI (Live Cloud Sync)</p>
+                                    <h1 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Inventory Tracker 2026</h1>
+                                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em]">PT. NAD INTI DISTRIBUSI</p>
                                 </div>
                             </div>
-                            
                             <div className="flex flex-wrap items-center gap-3">
-                                {isLoading && <div className="animate-spin text-indigo-600 mr-2"><Icon name="loader-2" size={18}/></div>}
-                                
-                                <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-                                    <button onClick={() => setView('dashboard')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-indigo-600'}`}>Kalender</button>
-                                    <button onClick={() => setView('recap')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-indigo-600'}`}>Rekap</button>
+                                <div className="flex bg-white p-1 rounded-xl border border-slate-200">
+                                    <button onClick={() => setView('dashboard')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase ${view === 'dashboard' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>Kalender</button>
+                                    <button onClick={() => setView('recap')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase ${view === 'recap' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>Rekap</button>
                                 </div>
-
-                                <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                                    <button onClick={prevMonth} className="p-2 hover:bg-slate-50 border-r border-slate-200 text-slate-400"><Icon name="chevron-left" size={16}/></button>
-                                    <div className="px-4 py-2 font-black text-slate-700 min-w-[140px] text-center uppercase text-[10px] tracking-widest">
-                                        {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
-                                    </div>
-                                    <button onClick={nextMonth} className="p-2 hover:bg-slate-50 border-l border-slate-200 text-slate-400"><Icon name="chevron-right" size={16}/></button>
+                                <div className="flex items-center bg-white border rounded-xl overflow-hidden">
+                                    <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 border-r"><Icon name="chevron-left" size={16}/></button>
+                                    <div className="px-4 font-black text-[10px] uppercase min-w-[120px] text-center">{currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}</div>
+                                    <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 border-l"><Icon name="chevron-right" size={16}/></button>
                                 </div>
-
-                                <button onClick={handleExportCSV} className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2.5 rounded-xl font-black hover:bg-emerald-100 transition-all text-[10px] uppercase tracking-widest shadow-sm">
-                                    <Icon name="file-text" size={14} /> Export CSV
-                                </button>
-
-                                <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-800 text-slate-800 px-4 py-2.5 rounded-xl font-black hover:bg-slate-50 transition-all text-[10px] uppercase tracking-widest">
-                                    <Icon name="plus" size={14} /> Artikel Master
-                                </button>
-                                <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-[10px] uppercase tracking-widest">
-                                    <Icon name="truck" size={14} /> Kedatangan
-                                </button>
+                                <button onClick={() => setIsModalOpen(true)} className="bg-white border-2 border-slate-800 text-slate-800 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest">+ Artikel Master</button>
+                                <button onClick={() => setIsArrivalModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg">Input Kedatangan</button>
                             </div>
                         </div>
 
                         {/* FILTERS */}
-                        <div className="mb-6 flex flex-wrap items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
-                            <div className="flex items-center gap-2 px-3 border-r border-slate-100 text-slate-500 font-black uppercase text-[10px]">
-                                <Icon name="filter" size={16} className="text-indigo-600" /> Filter :
-                            </div>
-                            <select className="bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase px-4 py-2 rounded-xl text-slate-600 min-w-[150px]" value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}>
+                        <div className="mb-6 flex flex-wrap gap-3 bg-white p-3 rounded-2xl border">
+                            <select className="bg-slate-50 border text-[10px] font-bold uppercase px-4 py-2 rounded-xl" value={filterBrand} onChange={e => setFilterBrand(e.target.value)}>
                                 <option value="">Semua Brand</option>
                                 {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
                             </select>
-                            <select className="bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase px-4 py-2 rounded-xl text-slate-600 min-w-[150px]" value={filterPo} onChange={(e) => setFilterPo(e.target.value)}>
-                                <option value="">Semua No. PO</option>
-                                {uniquePos.map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
-                            <div className="flex-1 min-w-[200px] relative">
-                                <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input placeholder="CARI ARTIKEL..." className="w-full bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase pl-10 pr-4 py-2 rounded-xl text-slate-600 outline-none focus:border-indigo-300" value={filterArtikel} onChange={(e) => setFilterArtikel(e.target.value)} />
-                            </div>
+                            <input placeholder="CARI ARTIKEL..." className="flex-1 bg-slate-50 border text-[10px] font-bold uppercase px-4 py-2 rounded-xl outline-none" value={filterArtikel} onChange={e => setFilterArtikel(e.target.value)} />
                         </div>
 
-                        {/* DATA TABLE */}
-                        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-fade-in relative">
-                            {isLoading && (
-                                <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-50 flex items-center justify-center">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <div className="animate-spin text-indigo-600"><Icon name="loader-2" size={40}/></div>
-                                        <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Memuat Data...</span>
-                                    </div>
-                                </div>
-                            )}
+                        {/* TABLE */}
+                        <div className="bg-white rounded-2xl shadow-xl border overflow-hidden">
                             <div className="overflow-x-auto max-h-[70vh]">
-                                <table className="w-full border-collapse text-[10px]">
-                                    <thead className="sticky top-0 z-30 shadow-sm">
-                                        <tr className="bg-slate-800 text-white">
-                                            <th rowSpan="3" className="w-20 border border-slate-700 p-3 uppercase bg-slate-900 sticky top-0">Aksi</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase sticky-po bg-slate-800">No. PO</th>
-                                            <th rowSpan="3" className="w-28 border border-slate-700 p-3 uppercase bg-slate-800">Tgl PO</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase bg-slate-800">Brand</th>
-                                            <th rowSpan="3" className="w-40 border border-slate-700 p-3 uppercase bg-slate-800">Artikel</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Color</th>
-                                            <th rowSpan="3" className="w-16 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Size</th>
-                                            <th rowSpan="3" className="w-20 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Qty PO</th>
-                                            
+                                <table className="w-full text-[10px] border-collapse">
+                                    <thead className="sticky top-0 z-30 bg-slate-800 text-white">
+                                        <tr>
+                                            <th rowSpan="3" className="border border-slate-700 p-3">AKSI</th>
+                                            <th rowSpan="3" className="border border-slate-700 p-3 sticky-po bg-slate-800">NO. PO</th>
+                                            <th rowSpan="3" className="border border-slate-700 p-3">BRAND</th>
+                                            <th rowSpan="3" className="border border-slate-700 p-3">ARTIKEL</th>
+                                            <th rowSpan="3" className="border border-slate-700 p-3">COLOR</th>
+                                            <th rowSpan="3" className="border border-slate-700 p-3">SIZE</th>
+                                            <th rowSpan="3" className="border border-slate-700 p-3">QTY PO</th>
                                             {view === 'dashboard' ? (
-                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center bg-slate-900 tracking-widest uppercase italic font-bold">Monitoring Kedatangan</th>
+                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center uppercase italic">Monitoring Kedatangan</th>
                                             ) : (
                                                 <>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-indigo-900">Online</th>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-amber-900">Offline</th>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-emerald-800 font-black">Total</th>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-rose-900">Sisa</th>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-slate-900 w-16">%</th>
+                                                    <th rowSpan="3" className="border border-slate-700 p-3 bg-indigo-900">ONLINE</th>
+                                                    <th rowSpan="3" className="border border-slate-700 p-3 bg-amber-900">OFFLINE</th>
+                                                    <th rowSpan="3" className="border border-slate-700 p-3 bg-emerald-800 font-black">TOTAL</th>
+                                                    <th rowSpan="3" className="border border-slate-700 p-3 bg-rose-900">SISA</th>
                                                 </>
                                             )}
                                         </tr>
                                         {view === 'dashboard' && (
                                             <>
-                                                <tr className="bg-slate-100 text-slate-700 font-black">
-                                                    {daysInMonth.map(date => <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-1 text-center min-w-[60px]">{date.getDate()}</th>)}
+                                                <tr className="bg-slate-100 text-slate-700">
+                                                    {daysInMonth.map(date => <th key={date.toISOString()} colSpan="2" className="border p-1">{date.getDate()}</th>)}
                                                 </tr>
-                                                <tr className="bg-slate-50 uppercase font-black text-[9px]">
+                                                <tr className="bg-slate-50 text-[8px]">
                                                     {daysInMonth.map(date => (
-                                                        <React.Fragment key={`sub-${date.toISOString()}`}>
-                                                            <th className="border border-slate-200 p-1 text-center text-indigo-600 bg-indigo-50/30">ON</th>
-                                                            <th className="border border-slate-200 p-1 text-center text-amber-600 bg-amber-50/30">OFF</th>
+                                                        <React.Fragment key={`h-${date.toISOString()}`}>
+                                                            <th className="border p-1 text-indigo-600">ON</th>
+                                                            <th className="border p-1 text-amber-600">OFF</th>
                                                         </React.Fragment>
                                                     ))}
                                                 </tr>
@@ -533,201 +340,106 @@
                                         )}
                                     </thead>
                                     <tbody>
-                                        {filteredArticles.length > 0 ? filteredArticles.map((art) => {
+                                        {filteredArticles.map(art => {
                                             const m = calculateMetrics(art);
-                                            const balance = art.qtyPo - m.total;
                                             return (
-                                                <tr key={art.id} className="table-row-hover transition-colors">
-                                                    <td className="border border-slate-200 p-2 text-center">
-                                                        <div className="flex items-center justify-center gap-1">
-                                                            <button onClick={() => { setEditData(art); setIsEditModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Icon name="edit-3" size={13}/></button>
-                                                            <button onClick={() => handleDeleteArticle(art.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={13}/></button>
+                                                <tr key={art.id} className="table-row-hover transition-colors border-b">
+                                                    <td className="p-2 text-center">
+                                                        <div className="flex justify-center gap-1">
+                                                            <button onClick={() => { setEditData(art); setIsEditModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded"><Icon name="edit-3" size={12}/></button>
+                                                            <button onClick={() => handleDeleteArticle(art.id)} className="p-1 text-red-600 hover:bg-red-50 rounded"><Icon name="trash-2" size={12}/></button>
                                                         </div>
                                                     </td>
-                                                    <td className="border border-slate-200 p-3 font-bold text-slate-500 text-center sticky-po">{art.noPo}</td>
-                                                    <td className="border border-slate-200 p-3 font-medium text-slate-500 text-center">{art.tglPo || '-'}</td>
-                                                    <td className="border border-slate-200 p-3 font-bold uppercase">{art.brand}</td>
-                                                    <td className="border border-slate-200 p-3 font-medium uppercase">{art.artikel}</td>
-                                                    <td className="border border-slate-200 p-3 text-center uppercase font-bold text-slate-400">{art.color}</td>
-                                                    <td className="border border-slate-200 p-3 text-center font-black">{art.size}</td>
-                                                    <td className="border border-slate-200 p-3 text-center font-bold bg-slate-50">{art.qtyPo}</td>
-                                                    
+                                                    <td className="p-3 font-bold sticky-po">{art.noPo}</td>
+                                                    <td className="p-3 uppercase">{art.brand}</td>
+                                                    <td className="p-3 uppercase">{art.artikel}</td>
+                                                    <td className="p-3 text-center uppercase font-bold text-slate-400">{art.color}</td>
+                                                    <td className="p-3 text-center font-black">{art.size}</td>
+                                                    <td className="p-3 text-center font-bold bg-slate-50">{art.qtyPo}</td>
                                                     {view === 'dashboard' ? (
                                                         daysInMonth.map(date => {
                                                             const key = toLocalDateString(date);
-                                                            const d = (art.arrivals && art.arrivals[key]) || { online: 0, offline: 0 };
+                                                            const d = art.arrivals?.[key] || { online: 0, offline: 0 };
                                                             return (
                                                                 <React.Fragment key={`${art.id}-${key}`}>
-                                                                    <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || '-'}</td>
-                                                                    <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || '-'}</td>
+                                                                    <td className="border-x p-1 text-center font-bold text-indigo-600">{d.online || ''}</td>
+                                                                    <td className="border-x p-1 text-center font-bold text-amber-600">{d.offline || ''}</td>
                                                                 </React.Fragment>
                                                             );
                                                         })
                                                     ) : (
                                                         <>
-                                                            <td className="border border-slate-200 p-3 text-center text-indigo-700 bg-indigo-50/20">{m.online}</td>
-                                                            <td className="border border-slate-200 p-3 text-center text-amber-700 bg-amber-50/20">{m.offline}</td>
-                                                            <td className="border border-slate-200 p-3 text-center bg-emerald-50 text-emerald-800 font-black">{m.total}</td>
-                                                            <td className={`border border-slate-200 p-3 text-center font-black ${balance > 0 ? 'text-rose-600 bg-rose-50' : 'text-emerald-600'}`}>{balance}</td>
-                                                            <td className="border border-slate-200 p-3 text-center font-black">
-                                                                <span className={`px-2 py-1 rounded-md ${m.percentage >= 100 ? 'bg-emerald-100 text-emerald-700' : m.percentage > 50 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                                    {m.percentage.toFixed(1)}%
-                                                                </span>
-                                                            </td>
+                                                            <td className="p-3 text-center text-indigo-700 bg-indigo-50/20">{m.online}</td>
+                                                            <td className="p-3 text-center text-amber-700 bg-amber-50/20">{m.offline}</td>
+                                                            <td className="p-3 text-center bg-emerald-50 font-black">{m.total}</td>
+                                                            <td className={`p-3 text-center font-black ${art.qtyPo - m.total > 0 ? 'text-rose-600 bg-rose-50' : 'text-emerald-600'}`}>{art.qtyPo - m.total}</td>
                                                         </>
                                                     )}
                                                 </tr>
                                             );
-                                        }) : (
-                                            <tr>
-                                                <td colSpan="100" className="p-10 text-center text-slate-400 font-bold uppercase tracking-widest italic">Belum ada data artikel.</td>
-                                            </tr>
-                                        )}
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     </div>
 
-                    {/* MODAL MASTER ARTIKEL */}
+                    {/* MODALS */}
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden animate-fade-in">
-                                <div className="bg-indigo-600 p-6 text-white flex justify-between items-center">
-                                    <h3 className="text-xl font-black uppercase tracking-tight">Daftarkan Artikel Master</h3>
-                                    <button onClick={() => setIsModalOpen(false)}><Icon name="x" size={24} /></button>
-                                </div>
-                                <div className="p-8 grid grid-cols-2 gap-5">
-                                    <div className="col-span-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">No. PO</label>
-                                        <input placeholder="PO-XXXX" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
-                                    </div>
-                                    <div className="col-span-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal PO</label>
-                                        <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Brand</label>
-                                        <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={formArticle.brand} onChange={e => setFormArticle({...formArticle, brand: e.target.value})}>
-                                            <option value="">-- PILIH BRAND --</option>
-                                            {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Artikel</label>
-                                        <input placeholder="NAMA ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Qty Target PO</label>
-                                        <input type="number" className="w-full p-4 bg-emerald-50 border border-emerald-100 rounded-2xl font-black text-emerald-700" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
-                                    </div>
-                                    <div className="col-span-2 flex gap-4 mt-4">
-                                        <button onClick={() => setIsModalOpen(false)} className="flex-1 p-4 bg-slate-100 rounded-2xl font-black text-slate-400 uppercase text-[10px]">Batal</button>
-                                        <button onClick={handleSaveArticle} className="flex-1 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Simpan</button>
-                                    </div>
+                            <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden animate-fade-in">
+                                <div className="bg-indigo-600 p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase">Artikel Master Baru</h3><button onClick={() => setIsModalOpen(false)}><Icon name="x"/></button></div>
+                                <div className="p-8 space-y-4">
+                                    <input placeholder="NO PO" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
+                                    <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={formArticle.brand} onChange={e => setFormArticle({...formArticle, brand: e.target.value})}>
+                                        <option value="">PILIH BRAND</option>
+                                        {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
+                                    </select>
+                                    <input placeholder="ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
+                                    <input type="number" placeholder="QTY PO" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: Number(e.target.value)})} />
+                                    <button onClick={handleSaveArticle} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px]">Simpan ke Cloud</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* MODAL ARRIVAL */}
                     {isArrivalModalOpen && (
                         <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
-                                <div className="p-6 border-b flex justify-between items-center text-indigo-600">
-                                    <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><Icon name="truck" /> Detail Kedatangan</h3>
-                                    <button onClick={() => setIsArrivalModalOpen(false)}><Icon name="x" size={20} /></button>
-                                </div>
+                            <div className="bg-white rounded-[2rem] w-full max-md overflow-hidden animate-fade-in">
+                                <div className="p-6 border-b flex justify-between items-center text-indigo-600"><h3 className="font-black uppercase text-xs">Input Kedatangan</h3><button onClick={() => setIsArrivalModalOpen(false)}><Icon name="x"/></button></div>
                                 <div className="p-8 space-y-4">
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Pilih Artikel Master</label>
-                                        <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-indigo-700 text-xs" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
-                                            <option value="">-- PILIH ARTIKEL --</option>
-                                            {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} | {a.artikel} ({a.brand})</option>)}
-                                        </select>
-                                    </div>
-
+                                    <select className="w-full p-4 bg-indigo-50 border rounded-2xl font-black text-xs" value={formArrival.targetPoId} onChange={e => setFormArrival({...formArrival, targetPoId: e.target.value})}>
+                                        <option value="">PILIH ARTIKEL MASTER</option>
+                                        {articles.filter(a => a.color === '-').map(a => <option key={a.id} value={a.id}>{a.noPo} | {a.artikel}</option>)}
+                                    </select>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <SearchableDropdown 
-                                            label="Color"
-                                            options={COLOR_LIST}
-                                            value={formArrival.color}
-                                            onChange={(val) => setFormArrival({...formArrival, color: val})}
-                                            placeholder="CARI WARNA..."
-                                        />
-
-                                        <SearchableDropdown 
-                                            label="Size"
-                                            options={SIZE_LIST}
-                                            value={formArrival.size}
-                                            onChange={(val) => setFormArrival({...formArrival, size: val})}
-                                            placeholder="CARI SIZE..."
-                                        />
+                                        <SearchableDropdown label="Color" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="WARNA"/>
+                                        <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="SIZE"/>
                                     </div>
-
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal Kedatangan</label>
-                                        <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold text-xs" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
-                                    </div>
-
+                                    <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold text-xs" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[9px] font-black uppercase text-indigo-400 ml-2 mb-1 block text-center">Online</label>
-                                            <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-indigo-50 rounded-2xl font-black text-indigo-600 text-center" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <label className="text-[9px] font-black uppercase text-amber-400 ml-2 mb-1 block text-center">Offline</label>
-                                            <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-amber-50 rounded-2xl font-black text-amber-600 text-center" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
-                                        </div>
+                                        <input type="number" placeholder="QTY ONLINE" className="p-4 border rounded-2xl text-center font-black text-indigo-600" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
+                                        <input type="number" placeholder="QTY OFFLINE" className="p-4 border rounded-2xl text-center font-black text-amber-600" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
                                     </div>
-                                    
-                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest mt-6 shadow-lg flex items-center justify-center gap-2">
-                                        <Icon name="check-circle" size={16} /> Simpan Kedatangan
-                                    </button>
+                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px]">Simpan Data</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* MODAL EDIT */}
-                    {isEditModalOpen && (
+                    {isEditModalOpen && editData && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden animate-fade-in">
-                                <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
-                                    <h3 className="text-xl font-black uppercase tracking-tight">Edit Detail Artikel</h3>
-                                    <button onClick={() => setIsEditModalOpen(false)}><Icon name="x" size={24} /></button>
-                                </div>
-                                <div className="p-8 grid grid-cols-2 gap-5">
-                                    <div className="col-span-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">No. PO</label>
-                                        <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value})} />
+                            <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden">
+                                <div className="bg-blue-600 p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase">Edit Artikel</h3><button onClick={() => setIsEditModalOpen(false)}><Icon name="x"/></button></div>
+                                <div className="p-8 space-y-4">
+                                    <input className="w-full p-4 border rounded-2xl font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value})} />
+                                    <input className="w-full p-4 border rounded-2xl font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value})} />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <input className="p-4 border rounded-2xl font-bold uppercase" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} />
+                                        <input className="p-4 border rounded-2xl font-bold uppercase" value={editData.size} onChange={e => setEditData({...editData, size: e.target.value})} />
                                     </div>
-                                    <div className="col-span-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Brand</label>
-                                        <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.brand} onChange={e => setEditData({...editData, brand: e.target.value})}>
-                                            {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Artikel</label>
-                                        <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value})} />
-                                    </div>
-                                    <div className="col-span-1 text-xs">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Color</label>
-                                        <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} />
-                                    </div>
-                                    <div className="col-span-1 text-xs">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Size</label>
-                                        <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.size} onChange={e => setEditData({...editData, size: e.target.value})} />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Qty Target PO</label>
-                                        <input type="number" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.qtyPo} onChange={e => setEditData({...editData, qtyPo: e.target.value})} />
-                                    </div>
-                                    <div className="col-span-2 flex gap-4 mt-6">
-                                        <button onClick={() => setIsEditModalOpen(false)} className="flex-1 p-4 bg-slate-100 rounded-2xl font-black text-slate-400 uppercase text-[10px]">Batal</button>
-                                        <button onClick={handleUpdateArticle} className="flex-1 p-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Update</button>
-                                    </div>
+                                    <input type="number" className="w-full p-4 border rounded-2xl font-bold" value={editData.qtyPo} onChange={e => setEditData({...editData, qtyPo: Number(e.target.value)})} />
+                                    <button onClick={handleUpdateArticle} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px]">Update</button>
                                 </div>
                             </div>
                         </div>
