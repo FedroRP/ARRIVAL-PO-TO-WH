@@ -22,13 +22,13 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useMemo, useEffect, useRef } = React;
 
-        // URL APPS SCRIPT ANDA
+        // URL GOOGLE APPS SCRIPT ANDA
         const SPREADSHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwvv5Op0SHL3PODTm602j7g_KlgCiOO7AiZ3Pa1eppMEln6G_cGgJTURHQ4nQISLPUw/exec"; 
 
         const BRAND_LIST = ["HEYMALE", "PREPSTUDIO", "ZOMA BASIC", "HEYLOCAL", "SHUWA MODEST", "BOONABOO", "ANSHARIYA", "NOSTALGY"];
@@ -85,35 +85,37 @@
 
         const App = () => {
             const [view, setView] = useState('dashboard');
-            const [dbStatus, setDbStatus] = useState('idle');
+            const [dbStatus, setDbStatus] = useState('idle'); // idle, loading, connected, error, syncing
             const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1));
-            const [articles, setArticles] = useState(() => {
-                const saved = localStorage.getItem('inventory_data_2026_fixed');
-                return saved ? JSON.parse(saved) : [];
-            });
+            const [articles, setArticles] = useState([]);
 
-            // FUNGSI LOAD DATA DENGAN ERROR HANDLING
+            // SINKRONISASI: Ambil data dari Sheets setiap kali App dibuka
             const fetchDataFromSheets = async () => {
-                if (!SPREADSHEET_WEB_APP_URL) return;
                 setDbStatus('loading');
                 try {
                     const response = await fetch(`${SPREADSHEET_WEB_APP_URL}?action=read`);
-                    const text = await response.text();
+                    const rawText = await response.text();
                     
                     try {
-                        const result = JSON.parse(text);
+                        const result = JSON.parse(rawText);
                         if (Array.isArray(result)) {
                             setArticles(result);
                             localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(result));
                             setDbStatus('connected');
+                        } else {
+                            throw new Error("Bukan array");
                         }
-                    } catch (jsonError) {
-                        // Jika bukan JSON (misal "Action not found"), gunakan data lokal
-                        console.warn("Server response not JSON, using local data:", text);
+                    } catch (e) {
+                        // Jika bukan JSON, berarti ada error di Apps Script (seperti 'Action not found')
+                        console.warn("Gagal parse JSON, memuat data lokal.");
+                        const saved = localStorage.getItem('inventory_data_2026_fixed');
+                        if (saved) setArticles(JSON.parse(saved));
                         setDbStatus('idle');
                     }
                 } catch (err) {
-                    console.error("Fetch Error:", err);
+                    console.error("Gagal terhubung ke Cloud:", err);
+                    const saved = localStorage.getItem('inventory_data_2026_fixed');
+                    if (saved) setArticles(JSON.parse(saved));
                     setDbStatus('error');
                 }
             };
@@ -122,17 +124,18 @@
                 fetchDataFromSheets();
             }, []);
 
+            // Kirim data ke Sheets
             const syncToSheets = async (latestData) => {
                 if (!SPREADSHEET_WEB_APP_URL) return;
                 setDbStatus('syncing');
                 try {
-                    const encodedData = encodeURIComponent(JSON.stringify(latestData));
-                    const finalUrl = `${SPREADSHEET_WEB_APP_URL}?action=sync&data=${encodedData}`;
-                    await fetch(finalUrl, { mode: 'no-cors' });
+                    const payload = encodeURIComponent(JSON.stringify(latestData));
+                    // Mengirim via doGet dengan parameter data
+                    await fetch(`${SPREADSHEET_WEB_APP_URL}?action=sync&data=${payload}`, { mode: 'no-cors' });
                     setDbStatus('connected');
                     setTimeout(() => setDbStatus('idle'), 3000);
                 } catch (err) {
-                    console.error("Sync Error:", err);
+                    console.error("Gagal sinkronisasi:", err);
                     setDbStatus('error');
                 }
             };
@@ -185,6 +188,7 @@
                 };
                 const updated = [...articles, newEntry];
                 setArticles(updated);
+                localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(updated));
                 syncToSheets(updated);
                 setIsModalOpen(false);
                 setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
@@ -206,8 +210,8 @@
                     const updatedArrivals = { ...targetArt.arrivals };
                     const existingDayData = updatedArrivals[arrivalDate] || { online: 0, offline: 0 };
                     updatedArrivals[arrivalDate] = { 
-                        online: existingDayData.online + (parseInt(formArrival.online) || 0), 
-                        offline: existingDayData.offline + (parseInt(formArrival.offline) || 0) 
+                        online: (parseInt(existingDayData.online) || 0) + (parseInt(formArrival.online) || 0), 
+                        offline: (parseInt(existingDayData.offline) || 0) + (parseInt(formArrival.offline) || 0) 
                     };
                     updatedArticles[existingIndex] = { ...targetArt, arrivals: updatedArrivals };
                 } else if (articleToUpdate.color === '-' && articleToUpdate.size === '-') {
@@ -229,135 +233,144 @@
                 }
                 
                 setArticles(updatedArticles);
+                localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(updatedArticles));
                 syncToSheets(updatedArticles);
                 setIsArrivalModalOpen(false);
                 setFormArrival({ ...formArrival, color: '', size: '', online: 0, offline: 0 });
             };
 
             return (
-                <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
+                <div className="min-h-screen p-4 md:p-6 font-sans">
                     <div className="max-w-[98vw] mx-auto">
-                        <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg text-white"><Icon name="package-check" size={28} /></div>
+                        {/* Header Section */}
+                        <div className="mb-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                            <div className="flex items-center gap-5">
+                                <div className="bg-indigo-600 p-4 rounded-[2rem] shadow-xl text-white">
+                                    <Icon name="cloud-lightning" size={32} />
+                                </div>
                                 <div>
-                                    <h1 className="text-2xl font-black uppercase tracking-tight leading-none mb-1 text-slate-800">Inventory Tracker 2026</h1>
-                                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] flex items-center gap-2">
-                                        PT. NAD INTI DISTRIBUSI 
-                                        <span className={`px-2 py-0.5 rounded-full text-[8px] border transition-all ${dbStatus === 'connected' ? 'border-emerald-200 text-emerald-600 bg-emerald-50' : (dbStatus === 'syncing' ? 'border-indigo-200 text-indigo-600 bg-indigo-50 animate-pulse' : 'border-slate-200 text-slate-400')}`}>
-                                            {dbStatus === 'syncing' ? 'MENGIRIM...' : dbStatus === 'connected' ? 'SINKRONISASI OK' : (dbStatus === 'loading' ? 'LOADING...' : 'LOCAL SAVED')}
-                                        </span>
-                                    </p>
+                                    <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900 leading-none">Inventory Cloud 2026</h1>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <span className={`w-2 h-2 rounded-full ${dbStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
+                                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">
+                                            Status: {dbStatus.toUpperCase()} 
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                             
-                            <div className="flex flex-wrap items-center gap-3">
-                                <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm mr-2">
-                                    <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"><Icon name="chevron-left" size={16}/></button>
-                                    <span className="px-4 text-[10px] font-black uppercase text-slate-700 min-w-[120px] text-center">
+                            <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-[1.5rem] shadow-sm border border-slate-100">
+                                <div className="flex items-center bg-slate-50 rounded-xl px-2">
+                                    <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white rounded-lg transition-all text-slate-400 hover:text-indigo-600"><Icon name="chevron-left" size={16}/></button>
+                                    <span className="px-4 text-[11px] font-black uppercase text-slate-700 min-w-[140px] text-center">
                                         {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
                                     </span>
-                                    <button onClick={() => changeMonth(1)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"><Icon name="chevron-right" size={16}/></button>
+                                    <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white rounded-lg transition-all text-slate-400 hover:text-indigo-600"><Icon name="chevron-right" size={16}/></button>
                                 </div>
 
-                                <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-                                    <button onClick={() => setView('dashboard')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Kalender</button>
-                                    <button onClick={() => setView('recap')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase ${view === 'recap' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Rekap</button>
-                                </div>
+                                <div className="h-8 w-[1px] bg-slate-100"></div>
+
+                                <button onClick={() => setView('dashboard')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}>Kalender</button>
+                                <button onClick={() => setView('recap')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}>Rekap</button>
                                 
-                                <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-800 text-slate-800 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-colors">
-                                    <Icon name="plus" size={14} /> Master PO
+                                <button onClick={fetchDataFromSheets} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100">
+                                    <Icon name="refresh-cw" size={18} className={dbStatus === 'loading' ? 'animate-spin' : ''}/>
                                 </button>
-                                
-                                <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-black shadow-lg text-[10px] uppercase hover:bg-indigo-700 transition-colors">
-                                    <Icon name="truck" size={14} /> Input Arrival
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-900 text-slate-900 px-6 py-3 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-900 hover:text-white transition-all shadow-md">
+                                    <Icon name="file-plus" size={14} /> Master PO
                                 </button>
-                                
-                                <button onClick={fetchDataFromSheets} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-600 transition-all" title="Refresh Data">
-                                    <Icon name="refresh-cw" size={16} className={dbStatus === 'loading' ? 'animate-spin' : ''} />
+                                <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black shadow-xl text-[10px] uppercase hover:bg-indigo-700 transition-all">
+                                    <Icon name="truck" size={14} /> Kedatangan
                                 </button>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-fade-in">
-                            <div className="overflow-x-auto max-h-[70vh]">
+                        {/* Main Table */}
+                        <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 overflow-hidden animate-fade-in">
+                            <div className="overflow-x-auto max-h-[72vh] custom-scrollbar">
                                 <table className="w-full border-collapse text-[10px]">
                                     <thead className="sticky top-0 z-30">
-                                        <tr className="bg-slate-800 text-white uppercase">
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 sticky-po bg-slate-800">No. PO</th>
-                                            <th rowSpan="3" className="w-28 border border-slate-700 p-3 bg-slate-800">Tgl PO</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 bg-slate-800">Brand</th>
-                                            <th rowSpan="3" className="w-40 border border-slate-700 p-3 bg-slate-800">Artikel</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 bg-slate-800">Color</th>
-                                            <th rowSpan="3" className="w-16 border border-slate-700 p-3 bg-slate-800">Size</th>
-                                            <th rowSpan="3" className="w-20 border border-slate-700 p-3 bg-slate-800">Qty PO</th>
+                                        <tr className="bg-slate-900 text-white uppercase tracking-tighter">
+                                            <th rowSpan="3" className="w-32 border border-slate-800 p-4 sticky-po bg-slate-900">Nomor PO</th>
+                                            <th rowSpan="3" className="w-28 border border-slate-800 p-4 bg-slate-900">Tanggal</th>
+                                            <th rowSpan="3" className="w-32 border border-slate-800 p-4 bg-slate-900">Brand</th>
+                                            <th rowSpan="3" className="w-44 border border-slate-800 p-4 bg-slate-900 text-left">Nama Artikel</th>
+                                            <th rowSpan="3" className="w-32 border border-slate-800 p-4 bg-slate-900">Warna</th>
+                                            <th rowSpan="3" className="w-16 border border-slate-800 p-4 bg-slate-900">Size</th>
+                                            <th rowSpan="3" className="w-20 border border-slate-800 p-4 bg-slate-900 text-indigo-400">Qty PO</th>
                                             {view === 'dashboard' ? (
-                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center bg-slate-900">
-                                                    Arrival {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-800 p-2 text-center bg-slate-950">
+                                                    Timeline Kedatangan - {currentDate.toLocaleString('id-ID', { month: 'long' })}
                                                 </th>
                                             ) : (
                                                 <>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 bg-indigo-900">Online</th>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 bg-amber-900">Offline</th>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 bg-emerald-800">Total</th>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 bg-rose-900">Sisa</th>
-                                                    <th rowSpan="3" className="border border-slate-700 p-3 bg-slate-900">%</th>
+                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-indigo-950 text-indigo-300">Online</th>
+                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-amber-950 text-amber-300">Offline</th>
+                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-emerald-900 text-emerald-300">Total</th>
+                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-rose-950 text-rose-300">Sisa</th>
+                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-slate-950">%</th>
                                                 </>
                                             )}
                                         </tr>
                                         {view === 'dashboard' && (
                                             <>
-                                                <tr className="bg-slate-100 text-slate-700 font-black">
+                                                <tr className="bg-slate-100 text-slate-500 font-black">
                                                     {daysInMonth.map(date => <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-1 text-center">{date.getDate()}</th>)}
                                                 </tr>
                                                 <tr className="bg-slate-50 text-[8px] font-black">
                                                     {daysInMonth.map(date => (
                                                         <React.Fragment key={`h-${date.toISOString()}`}>
-                                                            <th className="border border-slate-200 p-1 text-indigo-600">ON</th>
-                                                            <th className="border border-slate-200 p-1 text-amber-600">OFF</th>
+                                                            <th className="border border-slate-200 p-1 text-indigo-500 bg-indigo-50/50">ON</th>
+                                                            <th className="border border-slate-200 p-1 text-amber-600 bg-amber-50/50">OFF</th>
                                                         </React.Fragment>
                                                     ))}
                                                 </tr>
                                             </>
                                         )}
                                     </thead>
-                                    <tbody>
+                                    <tbody className="divide-y divide-slate-100">
                                         {articles.length === 0 ? (
                                             <tr>
-                                                <td colSpan="100" className="p-20 text-center text-slate-300 font-black uppercase tracking-widest">
-                                                    {dbStatus === 'loading' ? 'SINKRONISASI DATA...' : 'Belum ada data artikel'}
+                                                <td colSpan="100" className="p-24 text-center">
+                                                    <div className="flex flex-col items-center gap-3 opacity-20">
+                                                        <Icon name="database" size={48} />
+                                                        <p className="font-black uppercase tracking-[0.3em]">Belum Ada Data</p>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ) : (
                                             articles.map((art) => {
                                                 const m = calculateMetrics(art);
                                                 return (
-                                                    <tr key={art.id} className="table-row-hover">
-                                                        <td className="border border-slate-200 p-3 font-bold sticky-po">{art.noPo}</td>
-                                                        <td className="border border-slate-200 p-3 text-center">{art.tglPo || '-'}</td>
-                                                        <td className="border border-slate-200 p-3 uppercase">{art.brand}</td>
-                                                        <td className="border border-slate-200 p-3 uppercase font-black">{art.artikel}</td>
-                                                        <td className="border border-slate-200 p-3 text-center uppercase text-slate-500 font-bold">{art.color}</td>
-                                                        <td className="border border-slate-200 p-3 text-center font-black">{art.size}</td>
-                                                        <td className="border border-slate-200 p-3 text-center font-bold bg-slate-50">{art.qtyPo}</td>
+                                                    <tr key={art.id} className="table-row-hover group transition-colors">
+                                                        <td className="border border-slate-100 p-4 font-black sticky-po group-hover:bg-slate-50">{art.noPo}</td>
+                                                        <td className="border border-slate-100 p-4 text-center text-slate-400 font-bold">{art.tglPo || '-'}</td>
+                                                        <td className="border border-slate-100 p-4 uppercase font-bold text-slate-600">{art.brand}</td>
+                                                        <td className="border border-slate-100 p-4 uppercase font-black text-indigo-600">{art.artikel}</td>
+                                                        <td className="border border-slate-100 p-4 text-center uppercase text-slate-400 font-bold">{art.color}</td>
+                                                        <td className="border border-slate-100 p-4 text-center font-black">{art.size}</td>
+                                                        <td className="border border-slate-100 p-4 text-center font-black bg-indigo-50/30 text-indigo-700">{art.qtyPo}</td>
                                                         {view === 'dashboard' ? (
                                                             daysInMonth.map(date => {
                                                                 const dStr = toLocalDateString(date);
-                                                                const d = (art.arrivals && art.arrivals[dStr]) || { online: 0, offline: 0 };
+                                                                const val = (art.arrivals && art.arrivals[dStr]) || { online: 0, offline: 0 };
                                                                 return (
                                                                     <React.Fragment key={`${art.id}-${dStr}`}>
-                                                                        <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || ''}</td>
-                                                                        <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || ''}</td>
+                                                                        <td className="border border-slate-50 p-1 text-center font-black text-indigo-600 bg-white group-hover:bg-indigo-50/20">{val.online || ''}</td>
+                                                                        <td className="border border-slate-50 p-1 text-center font-black text-amber-600 bg-white group-hover:bg-amber-50/20">{val.offline || ''}</td>
                                                                     </React.Fragment>
                                                                 );
                                                             })
                                                         ) : (
                                                             <>
-                                                                <td className="border border-slate-200 p-3 text-center text-indigo-700">{m.online}</td>
-                                                                <td className="border border-slate-200 p-3 text-center text-amber-700">{m.offline}</td>
-                                                                <td className="border border-slate-200 p-3 text-center bg-emerald-50 font-black">{m.total}</td>
-                                                                <td className="border border-slate-200 p-3 text-center font-black text-rose-600 bg-rose-50">{art.qtyPo - m.total}</td>
-                                                                <td className="border border-slate-200 p-3 text-center font-black">{m.percentage.toFixed(1)}%</td>
+                                                                <td className="border border-slate-100 p-4 text-center text-indigo-700 font-bold">{m.online}</td>
+                                                                <td className="border border-slate-100 p-4 text-center text-amber-700 font-bold">{m.offline}</td>
+                                                                <td className="border border-slate-100 p-4 text-center bg-emerald-50 font-black text-emerald-700">{m.total}</td>
+                                                                <td className="border border-slate-100 p-4 text-center font-black text-rose-600 bg-rose-50/50">{art.qtyPo - m.total}</td>
+                                                                <td className="border border-slate-100 p-4 text-center font-black text-slate-400">{m.percentage.toFixed(1)}%</td>
                                                             </>
                                                         )}
                                                     </tr>
@@ -370,62 +383,85 @@
                         </div>
                     </div>
 
-                    {/* MODALS */}
+                    {/* Modal Master PO */}
                     {isModalOpen && (
-                        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden animate-fade-in">
-                                <div className="bg-indigo-600 p-6 text-white flex justify-between items-center">
-                                    <h3 className="text-xl font-black uppercase">Tambah Master PO Baru</h3>
-                                    <button onClick={() => setIsModalOpen(false)}><Icon name="x" size={24} /></button>
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl flex items-center justify-center z-[100] p-4 animate-fade-in">
+                            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden">
+                                <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-2xl font-black uppercase tracking-tight">Master PO Baru</h3>
+                                        <p className="text-slate-400 text-[10px] font-bold uppercase mt-1">Input data artikel utama</p>
+                                    </div>
+                                    <button onClick={() => setIsModalOpen(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all"><Icon name="x" size={24} /></button>
                                 </div>
-                                <div className="p-8 grid grid-cols-2 gap-5">
+                                <div className="p-8 grid grid-cols-2 gap-6">
                                     <div className="col-span-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">No. PO</label>
-                                        <input placeholder="PO-XXXX" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-indigo-600" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Nomor PO</label>
+                                        <input placeholder="PO-2026-001" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
                                     </div>
                                     <div className="col-span-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Tgl PO</label>
-                                        <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-indigo-600" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Tanggal PO</label>
+                                        <input type="date" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black outline-none transition-all" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
                                     </div>
                                     <div className="col-span-2">
-                                        <SearchableDropdown label="Brand" options={BRAND_LIST} value={formArticle.brand} onChange={v => setFormArticle({...formArticle, brand: v})} placeholder="PILIH BRAND" />
+                                        <SearchableDropdown label="Pilih Brand" options={BRAND_LIST} value={formArticle.brand} onChange={v => setFormArticle({...formArticle, brand: v})} placeholder="CARI BRAND..." />
                                     </div>
                                     <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Nama Artikel</label>
-                                        <input placeholder="ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-indigo-600" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Nama Artikel</label>
+                                        <input placeholder="MASUKKAN NAMA PRODUK" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
                                     </div>
                                     <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Qty Target</label>
-                                        <input type="number" className="w-full p-4 bg-emerald-50 border rounded-2xl font-black text-emerald-700 outline-emerald-600" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Qty Target (Total)</label>
+                                        <input type="number" className="w-full p-5 bg-indigo-50 border-2 border-indigo-100 focus:border-indigo-600 rounded-2xl font-black text-2xl text-indigo-700 outline-none transition-all" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
                                     </div>
-                                    <button onClick={handleSaveArticle} className="col-span-2 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg transition-all">Simpan & Sinkron Cloud</button>
+                                    <button onClick={handleSaveArticle} className="col-span-2 py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all flex items-center justify-center gap-3">
+                                        <Icon name="save" size={18} /> Simpan Ke Database Cloud
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     )}
 
+                    {/* Modal Kedatangan */}
                     {isArrivalModalOpen && (
-                        <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
-                                <div className="p-6 border-b flex justify-between items-center text-indigo-600 font-black uppercase text-xs">
-                                    <span>Input Detail Kedatangan</span>
-                                    <button onClick={() => setIsArrivalModalOpen(false)}><Icon name="x" size={20} /></button>
+                        <div className="fixed inset-0 bg-indigo-950/60 backdrop-blur-xl flex items-center justify-center z-[100] p-4 animate-fade-in">
+                            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden">
+                                <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-indigo-50/50">
+                                    <div>
+                                        <h3 className="text-xl font-black uppercase text-indigo-900 leading-none">Input Kedatangan</h3>
+                                        <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mt-2">Update stok harian</p>
+                                    </div>
+                                    <button onClick={() => setIsArrivalModalOpen(false)} className="text-slate-400 hover:text-rose-500 transition-all"><Icon name="x" size={24} /></button>
                                 </div>
-                                <div className="p-8 space-y-4">
-                                    <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-xs outline-indigo-600" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
-                                        <option value="">-- PILIH ARTIKEL --</option>
-                                        {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} - {a.artikel}</option>)}
-                                    </select>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <SearchableDropdown label="Warna" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="WARNA" />
-                                        <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="SIZE" />
+                                <div className="p-8 space-y-5">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Pilih Artikel PO</label>
+                                        <select className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black text-[11px] outline-none transition-all" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
+                                            <option value="">-- PILIH LIST ARTIKEL --</option>
+                                            {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} | {a.artikel}</option>)}
+                                        </select>
                                     </div>
-                                    <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-indigo-600" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-4">
-                                        <input type="number" placeholder="ONLINE" className="w-full p-4 border-2 border-indigo-50 rounded-2xl font-black text-center outline-indigo-600" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
-                                        <input type="number" placeholder="OFFLINE" className="w-full p-4 border-2 border-amber-50 rounded-2xl font-black text-center outline-amber-600" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
+                                        <SearchableDropdown label="Warna" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="PILIH..." />
+                                        <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="PILIH..." />
                                     </div>
-                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg transition-all">Update & Sinkron Cloud</button>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Tanggal Kedatangan</label>
+                                        <input type="date" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black outline-none transition-all" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-indigo-400 ml-2 mb-2 block">Qty Online</label>
+                                            <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-indigo-100 focus:border-indigo-600 rounded-2xl font-black text-center text-lg text-indigo-600 transition-all" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-amber-500 ml-2 mb-2 block">Qty Offline</label>
+                                            <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-amber-100 focus:border-amber-600 rounded-2xl font-black text-center text-lg text-amber-600 transition-all" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
+                                        </div>
+                                    </div>
+                                    <button onClick={handleUpdateArrival} className="w-full py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">
+                                        Update Kedatangan Cloud
+                                    </button>
                                 </div>
                             </div>
                         </div>
