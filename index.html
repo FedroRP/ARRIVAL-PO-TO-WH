@@ -15,19 +15,21 @@
         .overflow-x-auto::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .overflow-x-auto::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .table-row-hover:hover td { background-color: #f8fafc !important; }
-        .sticky-po { position: sticky; left: 0; background: white; z-index: 10; }
+        .sticky-col { position: sticky; left: 0; background: white; z-index: 20; }
+        .sticky-col-2 { position: sticky; left: 60px; background: white; z-index: 20; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900">
+<body class="bg-slate-50 text-slate-900 font-sans">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useMemo, useEffect, useRef } = React;
 
+        // Ganti URL ini dengan URL Web App Apps Script Anda
         const SPREADSHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzdXHMawSG2gz3UVdsCjC3eryAQeKwRr_722AtkCbF-rVOtxxVVlrHJfHRG4tlUulwG/exec"; 
 
         const BRAND_LIST = ["HEYMALE", "PREPSTUDIO", "ZOMA BASIC", "HEYLOCAL", "SHUWA MODEST", "BOONABOO", "ANSHARIYA", "NOSTALGY"];
@@ -59,7 +61,7 @@
             return (
                 <div className="relative" ref={dropdownRef}>
                     <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">{label}</label>
-                    <div className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase text-xs cursor-pointer flex justify-between items-center" onClick={() => setIsOpen(!isOpen)}>
+                    <div className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase text-xs cursor-pointer flex justify-between items-center transition-all hover:bg-slate-100" onClick={() => setIsOpen(!isOpen)}>
                         <span className={value ? 'text-slate-900' : 'text-slate-400'}>{value || placeholder}</span>
                         <Icon name="chevron-down" size={14} className="text-slate-400" />
                     </div>
@@ -72,9 +74,9 @@
                                 </div>
                             </div>
                             <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
-                                {filteredOptions.map(opt => (
+                                {filteredOptions.length > 0 ? filteredOptions.map(opt => (
                                     <div key={opt} className="px-4 py-3 hover:bg-indigo-50 cursor-pointer text-[10px] font-black uppercase border-b border-slate-50" onClick={() => { onChange(opt); setIsOpen(false); setSearch(''); }}>{opt}</div>
-                                ))}
+                                )) : <div className="p-4 text-center text-[10px] text-slate-400 font-bold uppercase">Tidak Ditemukan</div>}
                             </div>
                         </div>
                     )}
@@ -87,6 +89,14 @@
             const [dbStatus, setDbStatus] = useState('idle');
             const [currentDate, setCurrentDate] = useState(new Date());
             const [articles, setArticles] = useState([]);
+            
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
+            const [editMode, setEditMode] = useState(false);
+            const [selectedId, setSelectedId] = useState(null);
+
+            const [formArticle, setFormArticle] = useState({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
+            const [formArrival, setFormArrival] = useState({ targetPo: '', date: toLocalDateString(new Date()), color: '', size: '', online: 0, offline: 0 });
 
             const fetchDataFromSheets = async () => {
                 setDbStatus('loading');
@@ -158,7 +168,6 @@
 
             const exportToCSV = () => {
                 const headers = ["NOMOR PO", "TANGGAL", "BRAND", "NAMA ARTIKEL", "WARNA", "SIZE", "QTY PO", "ONLINE", "OFFLINE", "TOTAL", "SISA"];
-                
                 const rows = articles.map(art => {
                     const m = calculateMetrics(art);
                     return [
@@ -181,36 +190,66 @@
                 const link = document.createElement("a");
                 const url = URL.createObjectURL(blob);
                 link.setAttribute("href", url);
-                link.setAttribute("download", `Inventory_Recap_${new Date().toLocaleDateString()}.csv`);
-                link.style.visibility = 'hidden';
+                link.setAttribute("download", `Recap_Inventory_${new Date().toLocaleDateString()}.csv`);
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
             };
 
-            const [isModalOpen, setIsModalOpen] = useState(false);
-            const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
-            const [formArticle, setFormArticle] = useState({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
-            const [formArrival, setFormArrival] = useState({ targetPo: '', date: toLocalDateString(new Date()), color: '', size: '', online: 0, offline: 0 });
-
             const handleSaveArticle = () => {
                 if (!formArticle.noPo || !formArticle.brand || !formArticle.artikel) return;
-                const newEntry = {
-                    id: Date.now().toString(),
-                    ...formArticle,
-                    noPo: formArticle.noPo.toUpperCase(),
-                    brand: formArticle.brand,
-                    artikel: formArticle.artikel.toUpperCase(),
-                    color: '-', 
-                    size: '-',  
-                    arrivals: {}
-                };
-                const updated = [...articles, newEntry];
+                
+                let updated;
+                if (editMode) {
+                    updated = articles.map(art => art.id === selectedId ? {
+                        ...art,
+                        ...formArticle,
+                        noPo: formArticle.noPo.toUpperCase(),
+                        artikel: formArticle.artikel.toUpperCase()
+                    } : art);
+                } else {
+                    const newEntry = {
+                        id: Date.now().toString(),
+                        ...formArticle,
+                        noPo: formArticle.noPo.toUpperCase(),
+                        brand: formArticle.brand,
+                        artikel: formArticle.artikel.toUpperCase(),
+                        color: '-', 
+                        size: '-',  
+                        arrivals: {}
+                    };
+                    updated = [...articles, newEntry];
+                }
+
                 setArticles(updated);
                 localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(updated));
                 syncToSheets(updated);
                 setIsModalOpen(false);
+                setEditMode(false);
+                setSelectedId(null);
                 setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
+            };
+
+            const handleEdit = (art) => {
+                setEditMode(true);
+                setSelectedId(art.id);
+                setFormArticle({
+                    noPo: art.noPo,
+                    tglPo: art.tglPo,
+                    brand: art.brand,
+                    artikel: art.artikel,
+                    qtyPo: art.qtyPo
+                });
+                setIsModalOpen(true);
+            };
+
+            const handleDelete = (id) => {
+                if (window.confirm("Apakah Anda yakin ingin menghapus data ini? Data di Cloud akan ikut terhapus.")) {
+                    const updated = articles.filter(a => a.id !== id);
+                    setArticles(updated);
+                    localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(updated));
+                    syncToSheets(updated);
+                }
             };
 
             const handleUpdateArrival = () => {
@@ -222,7 +261,12 @@
                 const arrivalDate = formArrival.date;
 
                 let updatedArticles = [...articles];
-                const existingIndex = articles.findIndex(a => a.noPo === articleToUpdate.noPo && a.artikel === articleToUpdate.artikel && a.color === inputColor && a.size === inputSize);
+                const existingIndex = articles.findIndex(a => 
+                    a.noPo === articleToUpdate.noPo && 
+                    a.artikel === articleToUpdate.artikel && 
+                    a.color === inputColor && 
+                    a.size === inputSize
+                );
 
                 if (existingIndex !== -1) {
                     const targetArt = { ...updatedArticles[existingIndex] };
@@ -259,56 +303,57 @@
             };
 
             return (
-                <div className="min-h-screen p-4 md:p-6 font-sans">
+                <div className="min-h-screen p-4 md:p-6">
                     <div className="max-w-[98vw] mx-auto">
-                        {/* Header */}
+                        
+                        {/* Header Section */}
                         <div className="mb-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                             <div className="flex items-center gap-5">
-                                <div className="bg-indigo-600 p-4 rounded-[2rem] shadow-xl text-white">
-                                    <Icon name="cloud-lightning" size={32} />
+                                <div className="bg-indigo-600 p-4 rounded-[1.8rem] shadow-xl text-white transform hover:rotate-6 transition-transform">
+                                    <Icon name="layout-grid" size={32} />
                                 </div>
                                 <div>
                                     <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900 leading-none">Inventory Cloud 2026</h1>
                                     <div className="flex items-center gap-2 mt-2">
                                         <span className={`w-2 h-2 rounded-full ${
-                                            dbStatus === 'connected' ? 'bg-emerald-500' : 
+                                            dbStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 
                                             dbStatus === 'syncing' ? 'bg-indigo-500 animate-bounce' : 
                                             dbStatus === 'loading' ? 'bg-amber-500 animate-pulse' : 
                                             dbStatus === 'error' ? 'bg-rose-500' : 'bg-slate-300'
                                         }`}></span>
-                                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">
-                                            Status: {dbStatus.toUpperCase()} 
+                                        <p className="text-slate-500 text-[9px] font-black uppercase tracking-widest">
+                                            Cloud: {dbStatus === 'connected' ? 'Synced' : dbStatus.toUpperCase()} 
                                         </p>
                                     </div>
                                 </div>
                             </div>
                             
                             <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-[1.5rem] shadow-sm border border-slate-100">
-                                <div className="flex items-center bg-slate-50 rounded-xl px-2">
-                                    <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white rounded-lg transition-all text-slate-400 hover:text-indigo-600"><Icon name="chevron-left" size={16}/></button>
-                                    <span className="px-4 text-[11px] font-black uppercase text-slate-700 min-w-[140px] text-center">
+                                <div className="flex items-center bg-slate-50 rounded-xl px-1">
+                                    <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white rounded-lg transition-all text-slate-400 hover:text-indigo-600"><Icon name="chevron-left" size={14}/></button>
+                                    <span className="px-4 text-[10px] font-black uppercase text-slate-700 min-w-[120px] text-center">
                                         {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
                                     </span>
-                                    <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white rounded-lg transition-all text-slate-400 hover:text-indigo-600"><Icon name="chevron-right" size={16}/></button>
+                                    <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white rounded-lg transition-all text-slate-400 hover:text-indigo-600"><Icon name="chevron-right" size={14}/></button>
                                 </div>
 
-                                <div className="h-8 w-[1px] bg-slate-100"></div>
+                                <div className="h-6 w-[1px] bg-slate-200 mx-1"></div>
 
-                                <button onClick={() => setView('dashboard')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}>Kalender</button>
-                                <button onClick={() => setView('recap')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}>Rekap</button>
+                                <button onClick={() => setView('dashboard')} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}>Timeline</button>
+                                <button onClick={() => setView('recap')} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}>Recap</button>
                                 
-                                <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100">
-                                    <Icon name="download" size={14} /> Export CSV
+                                <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100">
+                                    <Icon name="download" size={14} /> Export
                                 </button>
 
-                                <button onClick={fetchDataFromSheets} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100">
-                                    <Icon name="refresh-cw" size={18} className={dbStatus === 'loading' || dbStatus === 'syncing' ? 'animate-spin' : ''}/>
+                                <button onClick={fetchDataFromSheets} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-indigo-600 transition-all">
+                                    <Icon name="refresh-cw" size={16} className={dbStatus === 'loading' || dbStatus === 'syncing' ? 'animate-spin' : ''}/>
                                 </button>
                             </div>
 
                             <div className="flex gap-3">
-                                <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-900 text-slate-900 px-6 py-3 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-900 hover:text-white transition-all shadow-md">
-                                    <Icon name="file-plus" size={14} /> Master PO
+                                <button onClick={() => { setEditMode(false); setIsModalOpen(true); }} className="flex items-center gap-2 bg-white border-2 border-slate-900 text-slate-900 px-6 py-3 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-900 hover:text-white transition-all shadow-md">
+                                    <Icon name="plus-circle" size={14} /> Master PO
                                 </button>
                                 <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black shadow-xl text-[10px] uppercase hover:bg-indigo-700 transition-all">
                                     <Icon name="truck" size={14} /> Kedatangan
@@ -316,30 +361,31 @@
                             </div>
                         </div>
 
-                        {/* Main Table */}
+                        {/* Main Inventory Table */}
                         <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 overflow-hidden animate-fade-in">
                             <div className="overflow-x-auto max-h-[72vh] custom-scrollbar">
                                 <table className="w-full border-collapse text-[10px]">
                                     <thead className="sticky top-0 z-30">
                                         <tr className="bg-slate-900 text-white uppercase tracking-tighter">
-                                            <th rowSpan="3" className="w-32 border border-slate-800 p-4 sticky-po bg-slate-900">Nomor PO</th>
+                                            <th rowSpan="3" className="w-[60px] border border-slate-800 p-2 sticky-col bg-slate-900">Aksi</th>
+                                            <th rowSpan="3" className="w-32 border border-slate-800 p-4 sticky-col-2 bg-slate-900">Nomor PO</th>
                                             <th rowSpan="3" className="w-28 border border-slate-800 p-4 bg-slate-900">Tanggal</th>
                                             <th rowSpan="3" className="w-32 border border-slate-800 p-4 bg-slate-900">Brand</th>
                                             <th rowSpan="3" className="w-44 border border-slate-800 p-4 bg-slate-900 text-left">Nama Artikel</th>
-                                            <th rowSpan="3" className="w-32 border border-slate-800 p-4 bg-slate-900">Warna</th>
+                                            <th rowSpan="3" className="w-28 border border-slate-800 p-4 bg-slate-900">Warna</th>
                                             <th rowSpan="3" className="w-16 border border-slate-800 p-4 bg-slate-900">Size</th>
-                                            <th rowSpan="3" className="w-20 border border-slate-800 p-4 bg-slate-900 text-indigo-400">Qty PO</th>
+                                            <th rowSpan="3" className="w-20 border border-slate-800 p-4 bg-slate-900 text-indigo-300">Qty PO</th>
                                             {view === 'dashboard' ? (
                                                 <th colSpan={daysInMonth.length * 2} className="border border-slate-800 p-2 text-center bg-slate-950">
-                                                    Timeline Kedatangan - {currentDate.toLocaleString('id-ID', { month: 'long' })}
+                                                    Arus Kedatangan - {currentDate.toLocaleString('id-ID', { month: 'long' })}
                                                 </th>
                                             ) : (
                                                 <>
-                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-indigo-950 text-indigo-300">Online</th>
-                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-amber-950 text-amber-300">Offline</th>
+                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-indigo-950 text-indigo-300">On</th>
+                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-amber-950 text-amber-300">Off</th>
                                                     <th rowSpan="3" className="border border-slate-800 p-4 bg-emerald-900 text-emerald-300">Total</th>
                                                     <th rowSpan="3" className="border border-slate-800 p-4 bg-rose-950 text-rose-300">Sisa</th>
-                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-slate-950">%</th>
+                                                    <th rowSpan="3" className="border border-slate-800 p-4 bg-slate-950 text-slate-500">%</th>
                                                 </>
                                             )}
                                         </tr>
@@ -351,8 +397,8 @@
                                                 <tr className="bg-slate-50 text-[8px] font-black">
                                                     {daysInMonth.map(date => (
                                                         <React.Fragment key={`h-${date.toISOString()}`}>
-                                                            <th className="border border-slate-200 p-1 text-indigo-500 bg-indigo-50/50">ON</th>
-                                                            <th className="border border-slate-200 p-1 text-amber-600 bg-amber-50/50">OFF</th>
+                                                            <th className="border border-slate-200 p-1 text-indigo-500 bg-indigo-50/30">ON</th>
+                                                            <th className="border border-slate-200 p-1 text-amber-600 bg-amber-50/30">OFF</th>
                                                         </React.Fragment>
                                                     ))}
                                                 </tr>
@@ -362,12 +408,10 @@
                                     <tbody className="divide-y divide-slate-100">
                                         {articles.length === 0 ? (
                                             <tr>
-                                                <td colSpan="100" className="p-24 text-center">
-                                                    <div className="flex flex-col items-center gap-3 opacity-20">
-                                                        <Icon name="database" size={48} />
-                                                        <p className="font-black uppercase tracking-[0.3em]">
-                                                            {dbStatus === 'error' ? 'Gagal Memuat Cloud (Cek Apps Script)' : 'Belum Ada Data'}
-                                                        </p>
+                                                <td colSpan="100" className="p-32 text-center">
+                                                    <div className="flex flex-col items-center gap-4 opacity-30 grayscale">
+                                                        <Icon name="box" size={56} />
+                                                        <p className="font-black uppercase tracking-[0.4em] text-xs">Menunggu Data Cloud...</p>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -376,21 +420,27 @@
                                                 const m = calculateMetrics(art);
                                                 return (
                                                     <tr key={art.id} className="table-row-hover group transition-colors">
-                                                        <td className="border border-slate-100 p-4 font-black sticky-po group-hover:bg-slate-50">{art.noPo}</td>
+                                                        <td className="border border-slate-50 p-2 sticky-col group-hover:bg-slate-50">
+                                                            <div className="flex gap-1 justify-center">
+                                                                <button onClick={() => handleEdit(art)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"><Icon name="edit-3" size={14}/></button>
+                                                                <button onClick={() => handleDelete(art.id)} className="p-1.5 text-rose-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"><Icon name="trash-2" size={14}/></button>
+                                                            </div>
+                                                        </td>
+                                                        <td className="border border-slate-100 p-4 font-black sticky-col-2 group-hover:bg-slate-50">{art.noPo}</td>
                                                         <td className="border border-slate-100 p-4 text-center text-slate-400 font-bold">{art.tglPo || '-'}</td>
-                                                        <td className="border border-slate-100 p-4 uppercase font-bold text-slate-600">{art.brand}</td>
-                                                        <td className="border border-slate-100 p-4 uppercase font-black text-indigo-600">{art.artikel}</td>
+                                                        <td className="border border-slate-100 p-4 uppercase font-bold text-slate-500">{art.brand}</td>
+                                                        <td className="border border-slate-100 p-4 uppercase font-black text-slate-800">{art.artikel}</td>
                                                         <td className="border border-slate-100 p-4 text-center uppercase text-slate-400 font-bold">{art.color}</td>
                                                         <td className="border border-slate-100 p-4 text-center font-black">{art.size}</td>
-                                                        <td className="border border-slate-100 p-4 text-center font-black bg-indigo-50/30 text-indigo-700">{art.qtyPo}</td>
+                                                        <td className="border border-slate-100 p-4 text-center font-black bg-indigo-50/40 text-indigo-700">{art.qtyPo}</td>
                                                         {view === 'dashboard' ? (
                                                             daysInMonth.map(date => {
                                                                 const dStr = toLocalDateString(date);
                                                                 const val = (art.arrivals && art.arrivals[dStr]) || { online: 0, offline: 0 };
                                                                 return (
                                                                     <React.Fragment key={`${art.id}-${dStr}`}>
-                                                                        <td className="border border-slate-50 p-1 text-center font-black text-indigo-600 bg-white group-hover:bg-indigo-50/20">{val.online || ''}</td>
-                                                                        <td className="border border-slate-50 p-1 text-center font-black text-amber-600 bg-white group-hover:bg-amber-50/20">{val.offline || ''}</td>
+                                                                        <td className={`border border-slate-50 p-1 text-center font-black ${val.online ? 'text-indigo-600 bg-indigo-50/20' : 'text-transparent'}`}>{val.online || 0}</td>
+                                                                        <td className={`border border-slate-50 p-1 text-center font-black ${val.offline ? 'text-amber-600 bg-amber-50/20' : 'text-transparent'}`}>{val.offline || 0}</td>
                                                                     </React.Fragment>
                                                                 );
                                                             })
@@ -400,7 +450,7 @@
                                                                 <td className="border border-slate-100 p-4 text-center text-amber-700 font-bold">{m.offline}</td>
                                                                 <td className="border border-slate-100 p-4 text-center bg-emerald-50 font-black text-emerald-700">{m.total}</td>
                                                                 <td className="border border-slate-100 p-4 text-center font-black text-rose-600 bg-rose-50/50">{m.sisa}</td>
-                                                                <td className="border border-slate-100 p-4 text-center font-black text-slate-400">{m.percentage.toFixed(1)}%</td>
+                                                                <td className="border border-slate-100 p-4 text-center font-bold text-slate-400">{m.percentage.toFixed(0)}%</td>
                                                             </>
                                                         )}
                                                     </tr>
@@ -413,84 +463,84 @@
                         </div>
                     </div>
 
-                    {/* Modal Master PO */}
+                    {/* Modal Master PO (Add/Edit) */}
                     {isModalOpen && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl flex items-center justify-center z-[100] p-4 animate-fade-in">
-                            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden">
+                        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fade-in">
+                            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
                                 <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
                                     <div>
-                                        <h3 className="text-2xl font-black uppercase tracking-tight">Master PO Baru</h3>
-                                        <p className="text-slate-400 text-[10px] font-bold uppercase mt-1">Input data artikel utama</p>
+                                        <h3 className="text-2xl font-black uppercase tracking-tight">{editMode ? 'Edit Master PO' : 'Master PO Baru'}</h3>
+                                        <p className="text-slate-400 text-[10px] font-bold uppercase mt-1">Simpan ke Google Sheets Cloud</p>
                                     </div>
-                                    <button onClick={() => setIsModalOpen(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all"><Icon name="x" size={24} /></button>
+                                    <button onClick={() => { setIsModalOpen(false); setEditMode(false); }} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all"><Icon name="x" size={24} /></button>
                                 </div>
-                                <div className="p-8 grid grid-cols-2 gap-6">
-                                    <div className="col-span-1">
-                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Nomor PO</label>
-                                        <input placeholder="PO-2026-001" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
+                                <div className="p-8 space-y-6">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Nomor PO</label>
+                                            <input placeholder="PO-XXXX" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Tanggal PO</label>
+                                            <input type="date" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black outline-none transition-all" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
+                                        </div>
                                     </div>
-                                    <div className="col-span-1">
-                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Tanggal PO</label>
-                                        <input type="date" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black outline-none transition-all" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <SearchableDropdown label="Pilih Brand" options={BRAND_LIST} value={formArticle.brand} onChange={v => setFormArticle({...formArticle, brand: v})} placeholder="CARI BRAND..." />
-                                    </div>
-                                    <div className="col-span-2">
+                                    <SearchableDropdown label="Pilih Brand" options={BRAND_LIST} value={formArticle.brand} onChange={v => setFormArticle({...formArticle, brand: v})} placeholder="CARI BRAND..." />
+                                    <div>
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Nama Artikel</label>
-                                        <input placeholder="MASUKKAN NAMA PRODUK" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
+                                        <input placeholder="T-SHIRT COOL CLOTH" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
                                     </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Qty Target (Total)</label>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Qty Target</label>
                                         <input type="number" className="w-full p-5 bg-indigo-50 border-2 border-indigo-100 focus:border-indigo-600 rounded-2xl font-black text-2xl text-indigo-700 outline-none transition-all" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
                                     </div>
-                                    <button onClick={handleSaveArticle} className="col-span-2 py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all flex items-center justify-center gap-3">
-                                        <Icon name="save" size={18} /> Simpan Ke Database Cloud
+                                    <button onClick={handleSaveArticle} className="w-full py-5 bg-indigo-600 text-white rounded-[1.8rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all flex items-center justify-center gap-3">
+                                        <Icon name="cloud" size={18} /> {editMode ? 'Update Data di Cloud' : 'Kirim ke Database Cloud'}
                                     </button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Modal Kedatangan */}
+                    {/* Modal Kedatangan (Check-In) */}
                     {isArrivalModalOpen && (
-                        <div className="fixed inset-0 bg-indigo-950/60 backdrop-blur-xl flex items-center justify-center z-[100] p-4 animate-fade-in">
+                        <div className="fixed inset-0 bg-indigo-950/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fade-in">
                             <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden">
-                                <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-indigo-50/50">
+                                <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-indigo-50/30">
                                     <div>
-                                        <h3 className="text-xl font-black uppercase text-indigo-900 leading-none">Input Kedatangan</h3>
-                                        <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mt-2">Update stok harian</p>
+                                        <h3 className="text-xl font-black uppercase text-indigo-950 leading-none">Input Kedatangan</h3>
+                                        <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mt-2">Log harian gudang</p>
                                     </div>
-                                    <button onClick={() => setIsArrivalModalOpen(false)} className="text-slate-400 hover:text-rose-500 transition-all"><Icon name="x" size={24} /></button>
+                                    <button onClick={() => setIsArrivalModalOpen(false)} className="text-slate-300 hover:text-rose-500 transition-all"><Icon name="x" size={24} /></button>
                                 </div>
                                 <div className="p-8 space-y-5">
                                     <div>
-                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Pilih Artikel PO</label>
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Cari Master PO</label>
                                         <select className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black text-[11px] outline-none transition-all" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
-                                            <option value="">-- PILIH LIST ARTIKEL --</option>
-                                            {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} | {a.artikel}</option>)}
+                                            <option value="">-- PILIH ARTIKEL --</option>
+                                            {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} - {a.artikel}</option>)}
                                         </select>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <SearchableDropdown label="Warna" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="PILIH..." />
-                                        <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="PILIH..." />
+                                        <SearchableDropdown label="Warna" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="WARNA" />
+                                        <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="SIZE" />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Tanggal Kedatangan</label>
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Tanggal Datang</label>
                                         <input type="date" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl font-black outline-none transition-all" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <label className="text-[10px] font-black uppercase text-indigo-400 ml-2 mb-2 block">Qty Online</label>
+                                            <label className="text-[10px] font-black uppercase text-indigo-400 ml-2 mb-2 block">Online</label>
                                             <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-indigo-100 focus:border-indigo-600 rounded-2xl font-black text-center text-lg text-indigo-600 transition-all" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-black uppercase text-amber-500 ml-2 mb-2 block">Qty Offline</label>
+                                            <label className="text-[10px] font-black uppercase text-amber-500 ml-2 mb-2 block">Offline</label>
                                             <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-amber-100 focus:border-amber-600 rounded-2xl font-black text-center text-lg text-amber-600 transition-all" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
                                         </div>
                                     </div>
-                                    <button onClick={handleUpdateArrival} className="w-full py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">
-                                        Update Kedatangan Cloud
+                                    <button onClick={handleUpdateArrival} className="w-full py-5 bg-indigo-600 text-white rounded-[1.8rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all flex items-center justify-center gap-3">
+                                        <Icon name="upload-cloud" size={18} /> Update Stok Harian
                                     </button>
                                 </div>
                             </div>
