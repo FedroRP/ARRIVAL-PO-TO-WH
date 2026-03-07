@@ -28,9 +28,8 @@
     <script type="text/babel">
         const { useState, useMemo, useEffect, useRef } = React;
 
-        // --- KONFIGURASI DATABASE SPREADSHEET ---
-        // URL Apps Script yang baru saja Anda deploy
-        const SPREADSHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxjs1QdLeI7oGfVMPIIiyRiRXhljy5adgpgkHb895KaeKYY1Z1NhJ2a6vBMPwpsvsQE/exec"; 
+        // URL APPS SCRIPT TERBARU
+        const SPREADSHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwvv5Op0SHL3PODTm602j7g_KlgCiOO7AiZ3Pa1eppMEln6G_cGgJTURHQ4nQISLPUw/exec"; 
 
         const BRAND_LIST = ["HEYMALE", "PREPSTUDIO", "ZOMA BASIC", "HEYLOCAL", "SHUWA MODEST", "BOONABOO", "ANSHARIYA", "NOSTALGY"];
         const COLOR_LIST = ["ROSETTE", "SYCAMORE", "BLACK", "COLE", "BLUSH", "CLAY", "DAISY", "FLOYD", "GARNET", "JET BLACK", "POWDER", "IVORY", "BROWN", "NAVY", "GREY", "MIDNIGHT", "WHITE", "ASH GREY", "CARAMEL", "CASHMERE", "SAGE GREEN", "SAND", "VIOLET", "BUTTERSCOTCH", "CHARCOAL", "BEIGE", "COFFEE", "LIGHT TAUPE", "CREAM", "CANYON", "COASTAL", "LINEN", "ONYX", "PEONY", "ROYAL", "SEPHIA", "GOLD", "NUDE", "VANILLA", "LATTE", "BURGUNDY", "CHOCO", "TAUPE", "CORAL", "TEAL", "SAGE", "TERRACOTA", "GREIGE", "JADE", "PORCELAIN", "ROSEAT", "TRUFFLE", "FOREST", "LEAF", "SEASALT", "SUNDIAL", "STARLIGHT", "BLUE", "DENIM", "LIGHT GREY", "SKY BLUE", "ARMY", "DARK GREY", "MOCCA", "WINE", "DARK BLUE", "KELP", "OATMEAL", "DARK OLIVE", "MUSTARD", "OXIDE", "VERDIGN", "KHAKI", "RED WINE", "DARK BROWN", "FOREST GREEN", "GREEN", "MISTY", "PURPLE", "RED", "SEAGREEN", "YELLOW", "TAN", "CYAN", "LIGHT BLUE", "OLIVE", "STONE", "HAZELNUT", "ALL COLOUR", "DARK DENIM", "DARK CHOCO"];
@@ -89,10 +88,8 @@
 
         const App = () => {
             const [view, setView] = useState('dashboard');
-            const [filterBrand, setFilterBrand] = useState('');
-            const [filterPo, setFilterPo] = useState('');
-            const [filterArtikel, setFilterArtikel] = useState('');
             const [dbStatus, setDbStatus] = useState('idle');
+            // Menentukan bulan awal: Maret 2026
             const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1));
             const [articles, setArticles] = useState(() => {
                 const saved = localStorage.getItem('inventory_data_2026_fixed');
@@ -100,61 +97,46 @@
             });
 
             const [isModalOpen, setIsModalOpen] = useState(false);
-            const [isEditModalOpen, setIsEditModalOpen] = useState(false);
             const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
-
             const [formArticle, setFormArticle] = useState({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
-            const [editData, setEditData] = useState({ id: '', noPo: '', tglPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0 });
             const [formArrival, setFormArrival] = useState({ targetPo: '', date: toLocalDateString(new Date()), color: '', size: '', online: 0, offline: 0 });
 
-            // Otomatis simpan ke LocalStorage dan Sync ke Spreadsheet saat data berubah
-            useEffect(() => {
-                localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(articles));
-                if (articles.length > 0) {
-                    syncWithSpreadsheet(articles);
-                }
-            }, [articles]);
-
-            const syncWithSpreadsheet = async (dataToSync) => {
+            // SINKRONISASI KE GOOGLE SHEETS
+            const syncToSheets = async (latestData) => {
                 if (!SPREADSHEET_WEB_APP_URL) return;
                 setDbStatus('syncing');
                 try {
-                    // Gunakan fetch dengan mode no-cors untuk Apps Script POST
-                    await fetch(SPREADSHEET_WEB_APP_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'sync', data: dataToSync })
-                    });
+                    const encodedData = encodeURIComponent(JSON.stringify(latestData));
+                    const finalUrl = `${SPREADSHEET_WEB_APP_URL}?action=sync&data=${encodedData}`;
+                    await fetch(finalUrl, { mode: 'no-cors' });
                     setDbStatus('connected');
                     setTimeout(() => setDbStatus('idle'), 3000);
                 } catch (err) {
-                    console.error("Sync error:", err);
+                    console.error("Sync Error:", err);
                     setDbStatus('error');
                 }
             };
 
-            const uniquePos = useMemo(() => [...new Set(articles.map(a => a.noPo))].sort(), [articles]);
-            const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-            const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+            useEffect(() => {
+                localStorage.setItem('inventory_data_2026_fixed', JSON.stringify(articles));
+            }, [articles]);
 
             const daysInMonth = useMemo(() => {
                 const year = currentDate.getFullYear();
                 const month = currentDate.getMonth();
                 const date = new Date(year, month, 1);
                 const days = [];
-                while (date.getMonth() === month) { days.push(new Date(date)); date.setDate(date.getDate() + 1); }
+                while (date.getMonth() === month) {
+                    days.push(new Date(date));
+                    date.setDate(date.getDate() + 1);
+                }
                 return days;
             }, [currentDate]);
 
-            const filteredArticles = useMemo(() => {
-                return articles.filter(art => {
-                    const matchBrand = filterBrand === '' || art.brand === filterBrand;
-                    const matchPo = filterPo === '' || art.noPo === filterPo;
-                    const matchArtikel = filterArtikel === '' || art.artikel.includes(filterArtikel.toUpperCase());
-                    return matchBrand && matchPo && matchArtikel;
-                });
-            }, [articles, filterBrand, filterPo, filterArtikel]);
+            const changeMonth = (offset) => {
+                const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1);
+                setCurrentDate(newDate);
+            };
 
             const calculateMetrics = (art) => {
                 let online = 0, offline = 0;
@@ -179,14 +161,11 @@
                     size: '-',  
                     arrivals: {}
                 };
-                setArticles([...articles, newEntry]);
+                const updated = [...articles, newEntry];
+                setArticles(updated);
+                syncToSheets(updated);
                 setIsModalOpen(false);
                 setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
-            };
-
-            const handleUpdateArticle = () => {
-                setArticles(articles.map(art => art.id === editData.id ? { ...art, ...editData } : art));
-                setIsEditModalOpen(false);
             };
 
             const handleUpdateArrival = () => {
@@ -197,22 +176,38 @@
                 const inputSize = formArrival.size.toUpperCase();
                 const arrivalDate = formArrival.date;
 
+                let updatedArticles = [...articles];
                 const existingIndex = articles.findIndex(a => a.noPo === articleToUpdate.noPo && a.artikel === articleToUpdate.artikel && a.color === inputColor && a.size === inputSize);
 
                 if (existingIndex !== -1) {
-                    const updatedArticles = [...articles];
-                    const targetArt = updatedArticles[existingIndex];
+                    const targetArt = { ...updatedArticles[existingIndex] };
                     const updatedArrivals = { ...targetArt.arrivals };
                     const existingDayData = updatedArrivals[arrivalDate] || { online: 0, offline: 0 };
-                    updatedArrivals[arrivalDate] = { online: existingDayData.online + (parseInt(formArrival.online) || 0), offline: existingDayData.offline + (parseInt(formArrival.offline) || 0) };
+                    updatedArrivals[arrivalDate] = { 
+                        online: existingDayData.online + (parseInt(formArrival.online) || 0), 
+                        offline: existingDayData.offline + (parseInt(formArrival.offline) || 0) 
+                    };
                     updatedArticles[existingIndex] = { ...targetArt, arrivals: updatedArrivals };
-                    setArticles(updatedArticles);
                 } else if (articleToUpdate.color === '-' && articleToUpdate.size === '-') {
-                    setArticles(articles.map(art => art.id === targetId ? { ...art, color: inputColor, size: inputSize, arrivals: { [arrivalDate]: { online: parseInt(formArrival.online) || 0, offline: parseInt(formArrival.offline) || 0 } } } : art));
+                    updatedArticles = articles.map(art => art.id === targetId ? { 
+                        ...art, 
+                        color: inputColor, 
+                        size: inputSize, 
+                        arrivals: { [arrivalDate]: { online: parseInt(formArrival.online) || 0, offline: parseInt(formArrival.offline) || 0 } } 
+                    } : art);
                 } else {
-                    const newEntry = { ...articleToUpdate, id: Date.now().toString(), color: inputColor, size: inputSize, arrivals: { [arrivalDate]: { online: parseInt(formArrival.online) || 0, offline: parseInt(formArrival.offline) || 0 } } };
-                    setArticles([...articles, newEntry]);
+                    const newEntry = { 
+                        ...articleToUpdate, 
+                        id: Date.now().toString(), 
+                        color: inputColor, 
+                        size: inputSize, 
+                        arrivals: { [arrivalDate]: { online: parseInt(formArrival.online) || 0, offline: parseInt(formArrival.offline) || 0 } } 
+                    };
+                    updatedArticles = [...articles, newEntry];
                 }
+                
+                setArticles(updatedArticles);
+                syncToSheets(updatedArticles);
                 setIsArrivalModalOpen(false);
                 setFormArrival({ ...formArrival, color: '', size: '', online: 0, offline: 0 });
             };
@@ -227,27 +222,32 @@
                                     <h1 className="text-2xl font-black uppercase tracking-tight leading-none mb-1 text-slate-800">Inventory Tracker 2026</h1>
                                     <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] flex items-center gap-2">
                                         PT. NAD INTI DISTRIBUSI 
-                                        <span className={`px-2 py-0.5 rounded-full text-[8px] border ${dbStatus === 'connected' ? 'border-emerald-200 text-emerald-600 bg-emerald-50' : (dbStatus === 'error' ? 'border-red-200 text-red-600' : 'border-slate-200 text-slate-400')}`}>
-                                            {dbStatus === 'syncing' ? 'SYNCING...' : dbStatus === 'connected' ? 'CLOUD READY' : dbStatus === 'error' ? 'SYNC ERROR' : 'LOCAL'}
+                                        <span className={`px-2 py-0.5 rounded-full text-[8px] border transition-all ${dbStatus === 'connected' ? 'border-emerald-200 text-emerald-600 bg-emerald-50' : (dbStatus === 'syncing' ? 'border-indigo-200 text-indigo-600 bg-indigo-50 animate-pulse' : 'border-slate-200 text-slate-400')}`}>
+                                            {dbStatus === 'syncing' ? 'MENGIRIM...' : dbStatus === 'connected' ? 'CLOUD SYNC OK' : 'LOCAL SAVED'}
                                         </span>
                                     </p>
                                 </div>
                             </div>
+                            
                             <div className="flex flex-wrap items-center gap-3">
+                                {/* Navigasi Bulan */}
+                                <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm mr-2">
+                                    <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"><Icon name="chevron-left" size={16}/></button>
+                                    <span className="px-4 text-[10px] font-black uppercase text-slate-700 min-w-[120px] text-center">
+                                        {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+                                    </span>
+                                    <button onClick={() => changeMonth(1)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"><Icon name="chevron-right" size={16}/></button>
+                                </div>
+
                                 <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
                                     <button onClick={() => setView('dashboard')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Kalender</button>
                                     <button onClick={() => setView('recap')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase ${view === 'recap' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Rekap</button>
                                 </div>
-                                <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                                    <button onClick={prevMonth} className="p-2 hover:bg-slate-50 border-r border-slate-200 text-slate-400"><Icon name="chevron-left" size={16}/></button>
-                                    <div className="px-4 py-2 font-black text-slate-700 min-w-[140px] text-center uppercase text-[10px]">{currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}</div>
-                                    <button onClick={nextMonth} className="p-2 hover:bg-slate-50 border-l border-slate-200 text-slate-400"><Icon name="chevron-right" size={16}/></button>
-                                </div>
                                 <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-800 text-slate-800 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-colors">
-                                    <Icon name="plus" size={14} /> Master
+                                    <Icon name="plus" size={14} /> Master PO
                                 </button>
                                 <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-black shadow-lg text-[10px] uppercase hover:bg-indigo-700 transition-colors">
-                                    <Icon name="truck" size={14} /> Kedatangan
+                                    <Icon name="truck" size={14} /> Input Arrival
                                 </button>
                             </div>
                         </div>
@@ -257,7 +257,6 @@
                                 <table className="w-full border-collapse text-[10px]">
                                     <thead className="sticky top-0 z-30">
                                         <tr className="bg-slate-800 text-white uppercase">
-                                            <th rowSpan="3" className="w-16 border border-slate-700 p-3 bg-slate-900 sticky top-0">Aksi</th>
                                             <th rowSpan="3" className="w-32 border border-slate-700 p-3 sticky-po bg-slate-800">No. PO</th>
                                             <th rowSpan="3" className="w-28 border border-slate-700 p-3 bg-slate-800">Tgl PO</th>
                                             <th rowSpan="3" className="w-32 border border-slate-700 p-3 bg-slate-800">Brand</th>
@@ -265,7 +264,11 @@
                                             <th rowSpan="3" className="w-32 border border-slate-700 p-3 bg-slate-800">Color</th>
                                             <th rowSpan="3" className="w-16 border border-slate-700 p-3 bg-slate-800">Size</th>
                                             <th rowSpan="3" className="w-20 border border-slate-700 p-3 bg-slate-800">Qty PO</th>
-                                            {view === 'dashboard' ? <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center bg-slate-900">Monitor {currentDate.toLocaleString('id-ID', { month: 'short' })}</th> : (
+                                            {view === 'dashboard' ? (
+                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center bg-slate-900">
+                                                    Arrival {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+                                                </th>
+                                            ) : (
                                                 <>
                                                     <th rowSpan="3" className="border border-slate-700 p-3 bg-indigo-900">Online</th>
                                                     <th rowSpan="3" className="border border-slate-700 p-3 bg-amber-900">Offline</th>
@@ -281,55 +284,68 @@
                                                     {daysInMonth.map(date => <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-1 text-center">{date.getDate()}</th>)}
                                                 </tr>
                                                 <tr className="bg-slate-50 text-[8px] font-black">
-                                                    {daysInMonth.map(date => <React.Fragment key={`h-${date.toISOString()}`}><th className="border border-slate-200 p-1 text-indigo-600">ON</th><th className="border border-slate-200 p-1 text-amber-600">OFF</th></React.Fragment>)}
+                                                    {daysInMonth.map(date => (
+                                                        <React.Fragment key={`h-${date.toISOString()}`}>
+                                                            <th className="border border-slate-200 p-1 text-indigo-600">ON</th>
+                                                            <th className="border border-slate-200 p-1 text-amber-600">OFF</th>
+                                                        </React.Fragment>
+                                                    ))}
                                                 </tr>
                                             </>
                                         )}
                                     </thead>
                                     <tbody>
-                                        {filteredArticles.map((art) => {
-                                            const m = calculateMetrics(art);
-                                            return (
-                                                <tr key={art.id} className="table-row-hover">
-                                                    <td className="border border-slate-200 p-2 text-center">
-                                                        <button onClick={() => { setEditData(art); setIsEditModalOpen(true); }} className="text-blue-600 p-1 hover:scale-110 transition-transform"><Icon name="edit-3" size={13}/></button>
-                                                    </td>
-                                                    <td className="border border-slate-200 p-3 font-bold sticky-po">{art.noPo}</td>
-                                                    <td className="border border-slate-200 p-3 text-center">{art.tglPo || '-'}</td>
-                                                    <td className="border border-slate-200 p-3 uppercase">{art.brand}</td>
-                                                    <td className="border border-slate-200 p-3 uppercase">{art.artikel}</td>
-                                                    <td className="border border-slate-200 p-3 text-center uppercase text-slate-400 font-bold">{art.color}</td>
-                                                    <td className="border border-slate-200 p-3 text-center font-black">{art.size}</td>
-                                                    <td className="border border-slate-200 p-3 text-center font-bold bg-slate-50">{art.qtyPo}</td>
-                                                    {view === 'dashboard' ? (
-                                                        daysInMonth.map(date => {
-                                                            const d = art.arrivals[toLocalDateString(date)] || { online: 0, offline: 0 };
-                                                            return <React.Fragment key={`${art.id}-${date}`}><td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || ''}</td><td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || ''}</td></React.Fragment>;
-                                                        })
-                                                    ) : (
-                                                        <>
-                                                            <td className="border border-slate-200 p-3 text-center text-indigo-700">{m.online}</td>
-                                                            <td className="border border-slate-200 p-3 text-center text-amber-700">{m.offline}</td>
-                                                            <td className="border border-slate-200 p-3 text-center bg-emerald-50 font-black">{m.total}</td>
-                                                            <td className="border border-slate-200 p-3 text-center font-black text-rose-600 bg-rose-50">{art.qtyPo - m.total}</td>
-                                                            <td className="border border-slate-200 p-3 text-center font-black">{m.percentage.toFixed(1)}%</td>
-                                                        </>
-                                                    )}
-                                                </tr>
-                                            );
-                                        })}
+                                        {articles.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="100" className="p-20 text-center text-slate-300 font-black uppercase tracking-widest">Belum ada data artikel</td>
+                                            </tr>
+                                        ) : (
+                                            articles.map((art) => {
+                                                const m = calculateMetrics(art);
+                                                return (
+                                                    <tr key={art.id} className="table-row-hover">
+                                                        <td className="border border-slate-200 p-3 font-bold sticky-po">{art.noPo}</td>
+                                                        <td className="border border-slate-200 p-3 text-center">{art.tglPo || '-'}</td>
+                                                        <td className="border border-slate-200 p-3 uppercase">{art.brand}</td>
+                                                        <td className="border border-slate-200 p-3 uppercase font-black">{art.artikel}</td>
+                                                        <td className="border border-slate-200 p-3 text-center uppercase text-slate-500 font-bold">{art.color}</td>
+                                                        <td className="border border-slate-200 p-3 text-center font-black">{art.size}</td>
+                                                        <td className="border border-slate-200 p-3 text-center font-bold bg-slate-50">{art.qtyPo}</td>
+                                                        {view === 'dashboard' ? (
+                                                            daysInMonth.map(date => {
+                                                                const d = art.arrivals[toLocalDateString(date)] || { online: 0, offline: 0 };
+                                                                return (
+                                                                    <React.Fragment key={`${art.id}-${date}`}>
+                                                                        <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || ''}</td>
+                                                                        <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || ''}</td>
+                                                                    </React.Fragment>
+                                                                );
+                                                            })
+                                                        ) : (
+                                                            <>
+                                                                <td className="border border-slate-200 p-3 text-center text-indigo-700">{m.online}</td>
+                                                                <td className="border border-slate-200 p-3 text-center text-amber-700">{m.offline}</td>
+                                                                <td className="border border-slate-200 p-3 text-center bg-emerald-50 font-black">{m.total}</td>
+                                                                <td className="border border-slate-200 p-3 text-center font-black text-rose-600 bg-rose-50">{art.qtyPo - m.total}</td>
+                                                                <td className="border border-slate-200 p-3 text-center font-black">{m.percentage.toFixed(1)}%</td>
+                                                            </>
+                                                        )}
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     </div>
 
-                    {/* MODAL INPUT MASTER */}
+                    {/* MODAL MASTER PO */}
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden animate-fade-in">
                                 <div className="bg-indigo-600 p-6 text-white flex justify-between items-center">
-                                    <h3 className="text-xl font-black uppercase">Daftarkan Master PO</h3>
+                                    <h3 className="text-xl font-black uppercase">Tambah Master PO Baru</h3>
                                     <button onClick={() => setIsModalOpen(false)}><Icon name="x" size={24} /></button>
                                 </div>
                                 <div className="p-8 grid grid-cols-2 gap-5">
@@ -342,27 +358,23 @@
                                         <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-indigo-600" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
                                     </div>
                                     <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Brand</label>
-                                        <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-indigo-600" value={formArticle.brand} onChange={e => setFormArticle({...formArticle, brand: e.target.value})}>
-                                            <option value="">-- PILIH BRAND --</option>
-                                            {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
-                                        </select>
+                                        <SearchableDropdown label="Brand" options={BRAND_LIST} value={formArticle.brand} onChange={v => setFormArticle({...formArticle, brand: v})} placeholder="PILIH BRAND" />
                                     </div>
                                     <div className="col-span-2">
                                         <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Nama Artikel</label>
                                         <input placeholder="ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase outline-indigo-600" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
                                     </div>
                                     <div className="col-span-2">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Total Qty Target PO</label>
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Qty Target</label>
                                         <input type="number" className="w-full p-4 bg-emerald-50 border rounded-2xl font-black text-emerald-700 outline-emerald-600" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
                                     </div>
-                                    <button onClick={handleSaveArticle} className="col-span-2 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg">Simpan Data Master</button>
+                                    <button onClick={handleSaveArticle} className="col-span-2 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg transition-all">Simpan Master & Sync</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* MODAL INPUT KEDATANGAN */}
+                    {/* MODAL KEDATANGAN */}
                     {isArrivalModalOpen && (
                         <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
@@ -371,6 +383,7 @@
                                     <button onClick={() => setIsArrivalModalOpen(false)}><Icon name="x" size={20} /></button>
                                 </div>
                                 <div className="p-8 space-y-4">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Pilih Master PO</label>
                                     <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-xs outline-indigo-600" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
                                         <option value="">-- PILIH ARTIKEL --</option>
                                         {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} - {a.artikel}</option>)}
@@ -379,12 +392,19 @@
                                         <SearchableDropdown label="Warna" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="WARNA" />
                                         <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="SIZE" />
                                     </div>
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 block">Tgl Kedatangan</label>
                                     <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-indigo-600" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-4">
-                                        <input type="number" placeholder="QTY ONLINE" className="w-full p-4 border-2 border-indigo-50 rounded-2xl font-black text-center outline-indigo-600" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
-                                        <input type="number" placeholder="QTY OFFLINE" className="w-full p-4 border-2 border-amber-50 rounded-2xl font-black text-center outline-amber-600" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
+                                        <div>
+                                            <label className="text-[8px] font-black text-indigo-400 ml-2">QTY ONLINE</label>
+                                            <input type="number" placeholder="ONLINE" className="w-full p-4 border-2 border-indigo-50 rounded-2xl font-black text-center outline-indigo-600" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[8px] font-black text-amber-400 ml-2">QTY OFFLINE</label>
+                                            <input type="number" placeholder="OFFLINE" className="w-full p-4 border-2 border-amber-50 rounded-2xl font-black text-center outline-amber-600" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
+                                        </div>
                                     </div>
-                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg">Simpan Kedatangan</button>
+                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] mt-4 hover:bg-indigo-700 shadow-lg">Simpan Kedatangan & Sync</button>
                                 </div>
                             </div>
                         </div>
