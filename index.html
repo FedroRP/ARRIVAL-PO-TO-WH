@@ -1,626 +1,743 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  onSnapshot, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query 
-} from 'firebase/firestore';
-import { 
-  getAuth, 
-  signInWithCustomToken, 
-  signInAnonymously, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  PackageCheck, 
-  ChevronDown, 
-  Search, 
-  ChevronLeft, 
-  ChevronRight, 
-  FileText, 
-  Plus, 
-  Truck, 
-  Filter, 
-  Edit3, 
-  Trash2, 
-  X, 
-  CheckCircle,
-  User
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Tracker 2026 - PT. NAD INTI DISTRIBUSI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
 
-// Firebase Configuration from environment
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'inventory-tracker-2026';
+    <style>
+        .overflow-x-auto::-webkit-scrollbar { height: 8px; }
+        .overflow-x-auto::-webkit-scrollbar-track { background: #f1f5f9; }
+        .overflow-x-auto::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .overflow-x-auto::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .table-row-hover:hover td { background-color: #f8fafc !important; }
+        .sticky-po { position: sticky; left: 0; background: white; z-index: 10; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
 
-const BRAND_LIST = [
-  "HEYMALE", "PREPSTUDIO", "ZOMA BASIC", "HEYLOCAL", 
-  "SHUWA MODEST", "BOONABOO", "ANSHARIYA", "NOSTALGY"
-];
+    <script type="text/babel">
+        const { useState, useMemo, useEffect, useRef } = React;
 
-const COLOR_LIST = [
-  "ROSETTE", "SYCAMORE", "SCYMORE", "BLACK", "COLE", "BLUSH", "CLAY", "DAISY", "FLOYD", "GARNET", 
-  "JET BLACK", "POWDER", "IVORY", "BROWN", "FADED BLUE", "MAROON", "NAVY", "GREY", "MIDNIGHT", "WHITE", 
-  "ASH GREY", "CARAMEL", "CASHMERE", "DEEP MAUVE", "SAGE GREEN", "SAND", "VIOLET", "BUTTERSCOTCH", 
-  "CHARCOAL", "GRASSHOPPER", "OAT", "SEA FOAM", "BEIGE", "COFFEE", "LIGHT TAUPE", "CREAM", "CANYON", 
-  "COASTAL", "LINEN", "ONYX", "PEONY", "ROYAL", "SEPHIA", "GOLD", "NUDE", "VANILLA", "LATTE", "BURGUNDY", 
-  "CHOCO", "TAUPE", "CORAL", "TEAL", "SAGE", "TERRACOTA", "GREIGE", "JADE", "PORCELAIN", "ROSEAT", "TRUFFLE", 
-  "FOREST", "LEAF", "SEASALT", "SUNDIAL", "STARLIGHT", "BLUE", "DENIM", "LIGHT GREY", "SKY BLUE", "ARMY", 
-  "DARK GREY", "LIGHT BROWN", "MOCCA", "WINE", "DARK BLUE", "KELP", "OATMEAL", "DARK OLIVE", "MUSTARD", 
-  "OXIDE", "VERDIGN", "KHAKI", "RED WINE", "DARK BROWN", "BROWN VILLET", "TWO TONE BROWN", "TWO TONE GREY", 
-  "FOREST GREEN", "GREEN", "MISTY", "PURPLE", "RED", "BLACK WHITE", "BLACK YELLOW", "SEAGREEN", "YELLOW", 
-  "TAN", "CYAN", "LIGHT BLUE", "NAVY GREY", "NAVY TONAL", "INDIGO WHITE", "MIDNIGHT BLUE", "BLACK GREY", 
-  "BLUE BLACK", "BLUE GREEN TEAL", "CRIMSON NAVY", "GREY WHITE", "NAVY WHITE", "OLIVE", "STONE", "HAZELNUT", 
-  "ALL COLOUR", "KOPI PRAMUKA", "ABU TUA", "STEEL BLUE", "CRINKLE GREY", "CRINKLE BLUE", "CRINKLE BLACK", 
-  "BLUE-WHITE", "BLACK-WHITE", "WHITE-BLACK", "OFF WHITE", "TOFFEE", "BLUE-NAVY", "NAVY-GREEN", "GREY-BLACK", 
-  "TERRACOTA-BLACK", "DEEP TAUPE", "BROKEN WHITE", "GREY BROWN", "TWO TONE BLACK", "DENIM LOOK", "TOFFE", 
-  "KHAKY", "SMOKE", "ESPRESSO", "LEATHERS - XXL", "EXTENDER", "DARK DENIM", "DARK CHOCO"
-];
-
-const SIZE_LIST = [
-  "L", "XL", "LX", "S", "SX", "M", "ALL SIZE", "SQUARE", "MEDIUM", 
-  "36", "37", "38", "39", "40", "41", "MINI", "WALLET", "50 ML", "80 GR", 
-  "10 GR", "28", "29", "30", "31", "32", "33", "34", "115 CM", "6", "12", "8", "4", "10"
-];
-
-const toLocalDateString = (date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const SearchableDropdown = ({ label, options, value, onChange, placeholder }) => {
-  const [search, setSearch] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  const filteredOptions = useMemo(() => {
-    return options.filter(opt => opt.toUpperCase().includes(search.toUpperCase()));
-  }, [options, search]);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">{label}</label>
-      <div 
-        className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase text-xs cursor-pointer flex justify-between items-center"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <span className={value ? 'text-slate-900' : 'text-slate-400'}>
-          {value || placeholder}
-        </span>
-        <ChevronDown size={14} className="text-slate-400" />
-      </div>
-      
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[110] overflow-hidden">
-          <div className="p-3 border-b bg-slate-50 sticky top-0">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                autoFocus
-                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] uppercase font-bold outline-none focus:border-indigo-400"
-                placeholder="SEARCH..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="max-h-[200px] overflow-y-auto">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map(opt => (
-                <div 
-                  key={opt}
-                  className="px-4 py-3 hover:bg-indigo-50 cursor-pointer text-[10px] font-black uppercase border-b border-slate-50 last:border-0"
-                  onClick={() => {
-                    onChange(opt);
-                    setIsOpen(false);
-                    setSearch('');
-                  }}
-                >
-                  {opt}
-                </div>
-              ))
-            ) : (
-              <div className="p-4 text-center text-slate-400 text-[10px] uppercase font-bold italic">Not found</div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [articles, setArticles] = useState([]);
-  const [view, setView] = useState('dashboard');
-  const [filterBrand, setFilterBrand] = useState('');
-  const [filterPo, setFilterPo] = useState('');
-  const [filterArtikel, setFilterArtikel] = useState('');
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
-
-  const [formArticle, setFormArticle] = useState({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
-  const [editData, setEditData] = useState(null);
-  const [formArrival, setFormArrival] = useState({
-    targetPo: '', 
-    date: toLocalDateString(new Date()), 
-    color: '', 
-    size: '', 
-    online: 0, 
-    offline: 0
-  });
-
-  // Auth Effect
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("Auth error:", err);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
-
-  // Data Sync Effect
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'articles'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setArticles(docs);
-    }, (err) => console.error("Firestore error:", err));
-    return () => unsubscribe();
-  }, [user]);
-
-  const uniquePos = useMemo(() => [...new Set(articles.map(a => a.noPo))].sort(), [articles]);
-
-  const daysInMonth = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const date = new Date(year, month, 1);
-    const days = [];
-    while (date.getMonth() === month) {
-      days.push(new Date(date));
-      date.setDate(date.getDate() + 1);
-    }
-    return days;
-  }, [currentDate]);
-
-  const filteredArticles = useMemo(() => {
-    return articles.filter(art => {
-      const matchBrand = filterBrand === '' || art.brand === filterBrand;
-      const matchPo = filterPo === '' || art.noPo === filterPo;
-      const matchArtikel = filterArtikel === '' || art.artikel.toUpperCase().includes(filterArtikel.toUpperCase());
-      return matchBrand && matchPo && matchArtikel;
-    });
-  }, [articles, filterBrand, filterPo, filterArtikel]);
-
-  const calculateMetrics = (art) => {
-    let online = 0, offline = 0;
-    if (art.arrivals) {
-      Object.values(art.arrivals).forEach(d => {
-        online += (parseInt(d.online) || 0);
-        offline += (parseInt(d.offline) || 0);
-      });
-    }
-    const total = online + offline;
-    const percentage = art.qtyPo > 0 ? (total / art.qtyPo) * 100 : 0;
-    return { online, offline, total, percentage };
-  };
-
-  const handleSaveArticle = async () => {
-    if (!user || !formArticle.noPo || !formArticle.brand || !formArticle.artikel) return;
-    const newId = Date.now().toString();
-    const newEntry = {
-      noPo: formArticle.noPo.toUpperCase(),
-      brand: formArticle.brand,
-      artikel: formArticle.artikel.toUpperCase(),
-      tglPo: formArticle.tglPo,
-      qtyPo: formArticle.qtyPo,
-      color: '-', 
-      size: '-',  
-      arrivals: {}
-    };
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'articles', newId), newEntry);
-    setIsModalOpen(false);
-    setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
-  };
-
-  const handleUpdateArticle = async () => {
-    if (!user || !editData) return;
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'articles', editData.id), {
-      ...editData,
-      noPo: editData.noPo.toUpperCase(),
-      artikel: editData.artikel.toUpperCase(),
-      color: editData.color.toUpperCase()
-    });
-    setIsEditModalOpen(false);
-  };
-
-  const handleDeleteArticle = async (id) => {
-    if (!user) return;
-    if (window.confirm("Hapus data baris ini secara permanen dari server?")) {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'articles', id));
-    }
-  };
-
-  const handleUpdateArrival = async () => {
-    if (!user || !formArrival.targetPo || !formArrival.color || !formArrival.size) return;
-
-    const targetId = formArrival.targetPo;
-    const articleToUpdate = articles.find(a => a.id === targetId);
-    const inputColor = formArrival.color.toUpperCase();
-    const inputSize = formArrival.size.toUpperCase();
-    const arrivalDate = formArrival.date;
-
-    // Check if we need to create a new row or update existing
-    const existingArt = articles.find(a => 
-      a.noPo === articleToUpdate.noPo && 
-      a.artikel === articleToUpdate.artikel && 
-      a.color === inputColor && 
-      a.size === inputSize
-    );
-
-    if (existingArt) {
-      const updatedArrivals = { ...(existingArt.arrivals || {}) };
-      const currentDay = updatedArrivals[arrivalDate] || { online: 0, offline: 0 };
-      updatedArrivals[arrivalDate] = {
-        online: (parseInt(currentDay.online) || 0) + (parseInt(formArrival.online) || 0),
-        offline: (parseInt(currentDay.offline) || 0) + (parseInt(formArrival.offline) || 0)
-      };
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'articles', existingArt.id), {
-        arrivals: updatedArrivals
-      });
-    } else if (articleToUpdate.color === '-' && articleToUpdate.size === '-') {
-      // Initialize the placeholder row
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'articles', targetId), {
-        color: inputColor,
-        size: inputSize,
-        arrivals: {
-          [arrivalDate]: {
-            online: parseInt(formArrival.online) || 0,
-            offline: parseInt(formArrival.offline) || 0
-          }
-        }
-      });
-    } else {
-      // Create new sub-entry for different color/size
-      const newId = Date.now().toString();
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'articles', newId), {
-        noPo: articleToUpdate.noPo,
-        brand: articleToUpdate.brand,
-        artikel: articleToUpdate.artikel,
-        tglPo: articleToUpdate.tglPo,
-        qtyPo: articleToUpdate.qtyPo,
-        color: inputColor,
-        size: inputSize,
-        arrivals: {
-          [arrivalDate]: {
-            online: parseInt(formArrival.online) || 0,
-            offline: parseInt(formArrival.offline) || 0
-          }
-        }
-      });
-    }
-
-    setIsArrivalModalOpen(false);
-    setFormArrival({ ...formArrival, color: '', size: '', online: 0, offline: 0 });
-  };
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center animate-pulse">
-          <PackageCheck size={48} className="text-indigo-600 mx-auto mb-4" />
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Menghubungkan ke Server...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
-      <div className="max-w-[98vw] mx-auto">
+        // --- FIREBASE CONFIGURATION ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore(app);
+        const auth = firebase.auth(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-inventory-tracker';
         
-        {/* HEADER */}
-        <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg text-white">
-              <PackageCheck size={28} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight leading-none mb-1 text-slate-800">Inventory Tracker 2026</h1>
-              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em]">PT. NAD INTI DISTRIBUSI • CLOUD SYNC</p>
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-              <button onClick={() => setView('dashboard')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-indigo-600'}`}>Kalender</button>
-              <button onClick={() => setView('recap')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-indigo-600'}`}>Rekap</button>
-            </div>
+        // Firestore Path Rule 1
+        const collectionPath = `artifacts/${appId}/public/data/inventory_articles`;
 
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 hover:bg-slate-50 border-r border-slate-200 text-slate-400"><ChevronLeft size={16}/></button>
-              <div className="px-4 py-2 font-black text-slate-700 min-w-[140px] text-center uppercase text-[10px] tracking-widest">
-                {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
-              </div>
-              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 hover:bg-slate-50 border-l border-slate-200 text-slate-400"><ChevronRight size={16}/></button>
-            </div>
+        const BRAND_LIST = [
+            "HEYMALE", "PREPSTUDIO", "ZOMA BASIC", "HEYLOCAL", 
+            "SHUWA MODEST", "BOONABOO", "ANSHARIYA", "NOSTALGY"
+        ];
 
-            <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-800 text-slate-800 px-4 py-2.5 rounded-xl font-black hover:bg-slate-50 transition-all text-[10px] uppercase tracking-widest">
-              <Plus size={14} /> Artikel Master
-            </button>
-            <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-[10px] uppercase tracking-widest">
-              <Truck size={14} /> Kedatangan
-            </button>
-          </div>
-        </div>
+        const COLOR_LIST = [
+            "ROSETTE", "SYCAMORE", "SCYMORE", "BLACK", "COLE", "BLUSH", "CLAY", "DAISY", "FLOYD", "GARNET", 
+            "JET BLACK", "POWDER", "IVORY", "BROWN", "FADED BLUE", "MAROON", "NAVY", "GREY", "MIDNIGHT", "WHITE", 
+            "ASH GREY", "CARAMEL", "CASHMERE", "DEEP MAUVE", "SAGE GREEN", "SAND", "VIOLET", "BUTTERSCOTCH", 
+            "CHARCOAL", "GRASSHOPPER", "OAT", "SEA FOAM", "BEIGE", "COFFEE", "LIGHT TAUPE", "CREAM", "CANYON", 
+            "COASTAL", "LINEN", "ONYX", "PEONY", "ROYAL", "SEPHIA", "GOLD", "NUDE", "VANILLA", "LATTE", "BURGUNDY", 
+            "CHOCO", "TAUPE", "CORAL", "TEAL", "SAGE", "TERRACOTA", "GREIGE", "JADE", "PORCELAIN", "ROSEAT", "TRUFFLE", 
+            "FOREST", "LEAF", "SEASALT", "SUNDIAL", "STARLIGHT", "BLUE", "DENIM", "LIGHT GREY", "SKY BLUE", "ARMY", 
+            "DARK GREY", "LIGHT BROWN", "MOCCA", "WINE", "DARK BLUE", "KELP", "OATMEAL", "DARK OLIVE", "MUSTARD", 
+            "OXIDE", "VERDIGN", "KHAKI", "RED WINE", "DARK BROWN", "BROWN VILLET", "TWO TONE BROWN", "TWO TONE GREY", 
+            "FOREST GREEN", "GREEN", "MISTY", "PURPLE", "RED", "BLACK WHITE", "BLACK YELLOW", "SEAGREEN", "YELLOW", 
+            "TAN", "CYAN", "LIGHT BLUE", "NAVY GREY", "NAVY TONAL", "INDIGO WHITE", "MIDNIGHT BLUE", "BLACK GREY", 
+            "BLUE BLACK", "BLUE GREEN TEAL", "CRIMSON NAVY", "GREY WHITE", "NAVY WHITE", "OLIVE", "STONE", "HAZELNUT", 
+            "ALL COLOUR", "KOPI PRAMUKA", "ABU TUA", "STEEL BLUE", "CRINKLE GREY", "CRINKLE BLUE", "CRINKLE BLACK", 
+            "BLUE-WHITE", "BLACK-WHITE", "WHITE-BLACK", "OFF WHITE", "TOFFEE", "BLUE-NAVY", "NAVY-GREEN", "GREY-BLACK", 
+            "TERRACOTA-BLACK", "DEEP TAUPE", "BROKEN WHITE", "GREY BROWN", "TWO TONE BLACK", "DENIM LOOK", "TOFFE", 
+            "KHAKY", "SMOKE", "ESPRESSO", "LEATHERS - XXL", "EXTENDER", "DARK DENIM", "DARK CHOCO"
+        ];
 
-        {/* FILTERS */}
-        <div className="mb-6 flex flex-wrap items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-2 px-3 border-r border-slate-100 text-slate-500 font-black uppercase text-[10px]">
-            <Filter size={16} className="text-indigo-600" /> Filter :
-          </div>
-          <select className="bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase px-4 py-2 rounded-xl text-slate-600 min-w-[150px]" value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}>
-            <option value="">Semua Brand</option>
-            {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select className="bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase px-4 py-2 rounded-xl text-slate-600 min-w-[150px]" value={filterPo} onChange={(e) => setFilterPo(e.target.value)}>
-            <option value="">Semua No. PO</option>
-            {uniquePos.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <div className="flex-1 min-w-[200px] relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input placeholder="CARI ARTIKEL..." className="w-full bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase pl-10 pr-4 py-2 rounded-xl text-slate-600 outline-none focus:border-indigo-300" value={filterArtikel} onChange={(e) => setFilterArtikel(e.target.value)} />
-          </div>
-        </div>
+        const SIZE_LIST = [
+            "L", "XL", "LX", "S", "SX", "XL", "M", "XL", "ALL SIZE", "SQUARE", "MEDIUM", 
+            "36", "37", "38", "39", "40", "41", "MINI", "WALLET", "50 ML", "80 GR", 
+            "10 GR", "28", "29", "30", "31", "32", "33", "34", "115 CM", "6", "12", "8", "4", "10"
+        ];
 
-        {/* TABLE */}
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto max-h-[70vh]">
-            <table className="w-full border-collapse text-[10px]">
-              <thead className="sticky top-0 z-30 shadow-sm">
-                <tr className="bg-slate-800 text-white">
-                  <th rowSpan="3" className="w-20 border border-slate-700 p-3 uppercase bg-slate-900 sticky top-0">Aksi</th>
-                  <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase sticky left-0 z-40 bg-slate-800">No. PO</th>
-                  <th rowSpan="3" className="w-28 border border-slate-700 p-3 uppercase bg-slate-800">Tgl PO</th>
-                  <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase bg-slate-800">Brand</th>
-                  <th rowSpan="3" className="w-40 border border-slate-700 p-3 uppercase bg-slate-800">Artikel</th>
-                  <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Color</th>
-                  <th rowSpan="3" className="w-16 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Size</th>
-                  <th rowSpan="3" className="w-20 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Qty PO</th>
-                  {view === 'dashboard' ? (
-                    <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center bg-slate-900 tracking-widest uppercase italic font-bold">Monitoring Kedatangan</th>
-                  ) : (
-                    <>
-                      <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-indigo-900">Online</th>
-                      <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-amber-900">Offline</th>
-                      <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-emerald-800 font-black">Total</th>
-                      <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-rose-900">Sisa</th>
-                      <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-slate-900 w-16">%</th>
-                    </>
-                  )}
-                </tr>
-                {view === 'dashboard' && (
-                  <>
-                    <tr className="bg-slate-100 text-slate-700 font-black">
-                      {daysInMonth.map(date => <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-1 text-center min-w-[60px]">{date.getDate()}</th>)}
-                    </tr>
-                    <tr className="bg-slate-50 uppercase font-black text-[9px]">
-                      {daysInMonth.map(date => (
-                        <React.Fragment key={`sub-${date.toISOString()}`}>
-                          <th className="border border-slate-200 p-1 text-center text-indigo-600 bg-indigo-50/30">ON</th>
-                          <th className="border border-slate-200 p-1 text-center text-amber-600 bg-amber-50/30">OFF</th>
-                        </React.Fragment>
-                      ))}
-                    </tr>
-                  </>
-                )}
-              </thead>
-              <tbody>
-                {filteredArticles.map((art) => {
-                  const m = calculateMetrics(art);
-                  const balance = art.qtyPo - m.total;
-                  return (
-                    <tr key={art.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="border border-slate-200 p-2 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => { setEditData(art); setIsEditModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit3 size={13}/></button>
-                          <button onClick={() => handleDeleteArticle(art.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={13}/></button>
+        const toLocalDateString = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const Icon = ({ name, size = 18, className = "" }) => {
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
+
+        const SearchableDropdown = ({ label, options, value, onChange, placeholder }) => {
+            const [search, setSearch] = useState('');
+            const [isOpen, setIsOpen] = useState(false);
+            const dropdownRef = useRef(null);
+
+            const filteredOptions = useMemo(() => {
+                return options.filter(opt => opt.toUpperCase().includes(search.toUpperCase()));
+            }, [options, search]);
+
+            useEffect(() => {
+                const handleClickOutside = (e) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
+                };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, []);
+
+            return (
+                <div className="relative" ref={dropdownRef}>
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">{label}</label>
+                    <div 
+                        className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase text-xs cursor-pointer flex justify-between items-center"
+                        onClick={() => setIsOpen(!isOpen)}
+                    >
+                        <span className={value ? 'text-slate-900' : 'text-slate-400'}>
+                            {value || placeholder}
+                        </span>
+                        <Icon name="chevron-down" size={14} className="text-slate-400" />
+                    </div>
+                    
+                    {isOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[110] overflow-hidden animate-fade-in">
+                            <div className="p-3 border-b bg-slate-50 sticky top-0">
+                                <div className="relative">
+                                    <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input 
+                                        autoFocus
+                                        className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] uppercase font-bold outline-none focus:border-indigo-400"
+                                        placeholder="SEARCH..."
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
+                                {filteredOptions.length > 0 ? (
+                                    filteredOptions.map(opt => (
+                                        <div 
+                                            key={opt}
+                                            className="px-4 py-3 hover:bg-indigo-50 cursor-pointer text-[10px] font-black uppercase border-b border-slate-50 last:border-0"
+                                            onClick={() => {
+                                                onChange(opt);
+                                                setIsOpen(false);
+                                                setSearch('');
+                                            }}
+                                        >
+                                            {opt}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="p-4 text-center text-slate-400 text-[10px] uppercase font-bold italic">Not found</div>
+                                )}
+                            </div>
                         </div>
-                      </td>
-                      <td className="border border-slate-200 p-3 font-bold text-slate-500 text-center sticky left-0 z-10 bg-white group-hover:bg-slate-50">{art.noPo}</td>
-                      <td className="border border-slate-200 p-3 font-medium text-slate-500 text-center">{art.tglPo || '-'}</td>
-                      <td className="border border-slate-200 p-3 font-bold uppercase">{art.brand}</td>
-                      <td className="border border-slate-200 p-3 font-medium uppercase">{art.artikel}</td>
-                      <td className="border border-slate-200 p-3 text-center uppercase font-bold text-slate-400">{art.color}</td>
-                      <td className="border border-slate-200 p-3 text-center font-black">{art.size}</td>
-                      <td className="border border-slate-200 p-3 text-center font-bold bg-slate-50">{art.qtyPo}</td>
-                      {view === 'dashboard' ? (
-                        daysInMonth.map(date => {
-                          const key = toLocalDateString(date);
-                          const d = (art.arrivals && art.arrivals[key]) || { online: 0, offline: 0 };
-                          return (
-                            <React.Fragment key={`${art.id}-${key}`}>
-                              <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || '-'}</td>
-                              <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || '-'}</td>
-                            </React.Fragment>
-                          );
-                        })
-                      ) : (
-                        <>
-                          <td className="border border-slate-200 p-3 text-center text-indigo-700 bg-indigo-50/20">{m.online}</td>
-                          <td className="border border-slate-200 p-3 text-center text-amber-700 bg-amber-50/20">{m.offline}</td>
-                          <td className="border border-slate-200 p-3 text-center bg-emerald-50 text-emerald-800 font-black">{m.total}</td>
-                          <td className={`border border-slate-200 p-3 text-center font-black ${balance > 0 ? 'text-rose-600 bg-rose-50' : 'text-emerald-600'}`}>{balance}</td>
-                          <td className="border border-slate-200 p-3 text-center font-black">
-                            <span className={`px-2 py-1 rounded-md ${m.percentage >= 100 ? 'bg-emerald-100 text-emerald-700' : m.percentage > 50 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
-                              {m.percentage.toFixed(1)}%
-                            </span>
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* User Status */}
-        <div className="mt-4 flex items-center gap-2 text-[9px] font-black uppercase text-slate-400 tracking-widest bg-white w-fit px-4 py-2 rounded-full border border-slate-200">
-           <User size={10} className="text-indigo-600" /> ID: {user?.uid}
-        </div>
-      </div>
-
-      {/* MODAL MASTER */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
-            <div className="bg-indigo-600 p-6 text-white flex justify-between items-center">
-              <h3 className="text-xl font-black uppercase tracking-tight">Daftarkan Artikel Master</h3>
-              <button onClick={() => setIsModalOpen(false)}><X size={24} /></button>
-            </div>
-            <div className="p-8 grid grid-cols-2 gap-5">
-              <div className="col-span-1">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">No. PO</label>
-                <input placeholder="PO-XXXX" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
-              </div>
-              <div className="col-span-1">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal PO</label>
-                <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
-              </div>
-              <div className="col-span-2">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Brand</label>
-                <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={formArticle.brand} onChange={e => setFormArticle({...formArticle, brand: e.target.value})}>
-                  <option value="">-- PILIH BRAND --</option>
-                  {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-              <div className="col-span-2">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Artikel</label>
-                <input placeholder="NAMA ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
-              </div>
-              <div className="col-span-2">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Qty Target PO</label>
-                <input type="number" className="w-full p-4 bg-emerald-50 border border-emerald-100 rounded-2xl font-black text-emerald-700" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
-              </div>
-              <button onClick={handleSaveArticle} className="col-span-2 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg mt-2 tracking-widest">Simpan Master ke Server</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL ARRIVAL */}
-      {isArrivalModalOpen && (
-        <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-6 border-b flex justify-between items-center text-indigo-600">
-              <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><Truck size={16} /> Detail Kedatangan</h3>
-              <button onClick={() => setIsArrivalModalOpen(false)}><X size={20} /></button>
-            </div>
-            <div className="p-8 space-y-4">
-              <div>
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Pilih Artikel Master</label>
-                <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-indigo-700 text-xs" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
-                  <option value="">-- PILIH ARTIKEL --</option>
-                  {articles.filter(a => a.color === '-').map(a => <option key={a.id} value={a.id}>{a.noPo} | {a.artikel} ({a.brand})</option>)}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <SearchableDropdown label="Color" options={COLOR_LIST} value={formArrival.color} onChange={(val) => setFormArrival({...formArrival, color: val})} placeholder="WARNA..." />
-                <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={(val) => setFormArrival({...formArrival, size: val})} placeholder="SIZE..." />
-              </div>
-
-              <div>
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal Kedatangan</label>
-                <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold text-xs" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-indigo-50/50 p-4 rounded-2xl">
-                   <label className="text-[9px] font-black uppercase text-indigo-400 text-center block mb-1">Online</label>
-                   <input type="number" placeholder="0" className="w-full bg-transparent font-black text-indigo-600 text-center outline-none" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
+                    )}
                 </div>
-                <div className="bg-amber-50/50 p-4 rounded-2xl">
-                   <label className="text-[9px] font-black uppercase text-amber-400 text-center block mb-1">Offline</label>
-                   <input type="number" placeholder="0" className="w-full bg-transparent font-black text-amber-600 text-center outline-none" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
-                </div>
-              </div>
-              
-              <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest mt-6 shadow-lg flex items-center justify-center gap-2">
-                <CheckCircle size={16} /> Simpan ke Cloud
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            );
+        };
 
-      {/* MODAL EDIT */}
-      {isEditModalOpen && editData && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden">
-            <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
-              <h3 className="text-xl font-black uppercase tracking-tight">Edit Artikel</h3>
-              <button onClick={() => setIsEditModalOpen(false)}><X size={24} /></button>
-            </div>
-            <div className="p-8 grid grid-cols-2 gap-5">
-              <div className="col-span-1">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">No. PO</label>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value})} />
-              </div>
-              <div className="col-span-1">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Brand</label>
-                <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.brand} onChange={e => setEditData({...editData, brand: e.target.value})}>
-                  {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-              <div className="col-span-2">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Artikel</label>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value})} />
-              </div>
-              <div className="col-span-1 text-xs">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Color</label>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} />
-              </div>
-              <div className="col-span-1 text-xs">
-                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Size</label>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.size} onChange={e => setEditData({...editData, size: e.target.value})} />
-              </div>
-              <button onClick={handleUpdateArticle} className="col-span-2 p-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg mt-4 tracking-widest">Update di Server</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [view, setView] = useState('dashboard');
+            const [filterBrand, setFilterBrand] = useState('');
+            const [filterPo, setFilterPo] = useState('');
+            const [filterArtikel, setFilterArtikel] = useState('');
+            const [isLoading, setIsLoading] = useState(true);
+
+            const [articles, setArticles] = useState([]);
+            const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); 
+            
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+            const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
+
+            const [formArticle, setFormArticle] = useState({ 
+                noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0
+            });
+
+            const [editData, setEditData] = useState({
+                id: '', noPo: '', tglPo: '', brand: '', artikel: '', color: '', size: '', qtyPo: 0
+            });
+
+            const [formArrival, setFormArrival] = useState({
+                targetPo: '', 
+                date: toLocalDateString(new Date()), 
+                color: '', 
+                size: '', 
+                online: 0, 
+                offline: 0
+            });
+
+            // (1) Handle Authentication (Rule 3)
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await auth.signInWithCustomToken(__initial_auth_token);
+                        } else {
+                            await auth.signInAnonymously();
+                        }
+                    } catch (err) {
+                        console.error("Auth Error:", err);
+                    }
+                };
+                initAuth();
+                const unsubscribe = auth.onAuthStateChanged(setUser);
+                return () => unsubscribe();
+            }, []);
+
+            // (2) Handle Firestore Real-time Data (Rule 2)
+            useEffect(() => {
+                if (!user) return;
+                setIsLoading(true);
+                
+                const unsubscribe = db.collection(collectionPath)
+                    .onSnapshot((snapshot) => {
+                        const data = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                        setArticles(data);
+                        setIsLoading(false);
+                    }, (error) => {
+                        console.error("Firestore Error:", error);
+                        setIsLoading(false);
+                    });
+
+                return () => unsubscribe();
+            }, [user]);
+
+            const uniquePos = useMemo(() => [...new Set(articles.map(a => a.noPo))].sort(), [articles]);
+
+            const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+            const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+
+            const daysInMonth = useMemo(() => {
+                const year = currentDate.getFullYear();
+                const month = currentDate.getMonth();
+                const date = new Date(year, month, 1);
+                const days = [];
+                while (date.getMonth() === month) {
+                    days.push(new Date(date));
+                    date.setDate(date.getDate() + 1);
+                }
+                return days;
+            }, [currentDate]);
+
+            const filteredArticles = useMemo(() => {
+                return articles.filter(art => {
+                    const matchBrand = filterBrand === '' || art.brand === filterBrand;
+                    const matchPo = filterPo === '' || art.noPo === filterPo;
+                    const matchArtikel = filterArtikel === '' || art.artikel.includes(filterArtikel.toUpperCase());
+                    return matchBrand && matchPo && matchArtikel;
+                });
+            }, [articles, filterBrand, filterPo, filterArtikel]);
+
+            const calculateMetrics = (art) => {
+                let online = 0, offline = 0;
+                if (art.arrivals) {
+                    Object.values(art.arrivals).forEach(d => {
+                        online += (parseInt(d.online) || 0);
+                        offline += (parseInt(d.offline) || 0);
+                    });
+                }
+                const total = online + offline;
+                const percentage = art.qtyPo > 0 ? (total / art.qtyPo) * 100 : 0;
+                return { online, offline, total, percentage };
+            };
+
+            const handleSaveArticle = async () => {
+                if (!user) return;
+                if (!formArticle.noPo || !formArticle.brand || !formArticle.artikel) return;
+                
+                const newEntry = {
+                    noPo: formArticle.noPo.toUpperCase(),
+                    tglPo: formArticle.tglPo,
+                    brand: formArticle.brand,
+                    artikel: formArticle.artikel.toUpperCase(),
+                    qtyPo: parseInt(formArticle.qtyPo) || 0,
+                    color: '-', 
+                    size: '-',  
+                    arrivals: {},
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                try {
+                    await db.collection(collectionPath).add(newEntry);
+                    setIsModalOpen(false);
+                    setFormArticle({ noPo: '', tglPo: '', brand: '', artikel: '', qtyPo: 0 });
+                } catch (err) {
+                    console.error("Save Error:", err);
+                }
+            };
+
+            const handleUpdateArticle = async () => {
+                if (!user) return;
+                try {
+                    await db.collection(collectionPath).doc(editData.id).update({
+                        noPo: editData.noPo.toUpperCase(),
+                        tglPo: editData.tglPo,
+                        brand: editData.brand,
+                        artikel: editData.artikel.toUpperCase(),
+                        color: editData.color.toUpperCase(),
+                        size: editData.size.toUpperCase(),
+                        qtyPo: parseInt(editData.qtyPo) || 0
+                    });
+                    setIsEditModalOpen(false);
+                } catch (err) {
+                    console.error("Update Error:", err);
+                }
+            };
+
+            const handleDeleteArticle = async (id) => {
+                if (!user) return;
+                const confirmDelete = window.confirm("Hapus data baris ini?");
+                if (confirmDelete) {
+                    try {
+                        await db.collection(collectionPath).doc(id).delete();
+                    } catch (err) {
+                        console.error("Delete Error:", err);
+                    }
+                }
+            };
+
+            const handleUpdateArrival = async () => {
+                if (!user || !formArrival.targetPo || !formArrival.color || !formArrival.size) {
+                    alert("Pilih Artikel, Color, dan Size!");
+                    return;
+                }
+
+                const targetId = formArrival.targetPo;
+                const articleToUpdate = articles.find(a => a.id === targetId);
+                const inputColor = formArrival.color.toUpperCase();
+                const inputSize = formArrival.size.toUpperCase();
+                const arrivalDate = formArrival.date;
+
+                // Mencari apakah baris dengan kombinasi PO, Artikel, Warna, dan Size yang sama sudah ada
+                const existingEntry = articles.find(a => 
+                    a.noPo === articleToUpdate.noPo && 
+                    a.artikel === articleToUpdate.artikel && 
+                    a.color === inputColor && 
+                    a.size === inputSize
+                );
+
+                try {
+                    if (existingEntry) {
+                        // Jika sudah ada, update datanya
+                        const updatedArrivals = { ...(existingEntry.arrivals || {}) };
+                        const existingDayData = updatedArrivals[arrivalDate] || { online: 0, offline: 0 };
+                        
+                        updatedArrivals[arrivalDate] = {
+                            online: (parseInt(existingDayData.online) || 0) + (parseInt(formArrival.online) || 0),
+                            offline: (parseInt(existingDayData.offline) || 0) + (parseInt(formArrival.offline) || 0)
+                        };
+                        
+                        await db.collection(collectionPath).doc(existingEntry.id).update({
+                            arrivals: updatedArrivals
+                        });
+                    } else if (articleToUpdate.color === '-' && articleToUpdate.size === '-') {
+                        // Jika baris master masih kosong warnanya, isi baris itu
+                        await db.collection(collectionPath).doc(targetId).update({
+                            color: inputColor,
+                            size: inputSize,
+                            arrivals: {
+                                [arrivalDate]: {
+                                    online: parseInt(formArrival.online) || 0,
+                                    offline: parseInt(formArrival.offline) || 0
+                                }
+                            }
+                        });
+                    } else {
+                        // Jika berbeda warna/size dari master yang sudah diisi, buat baris baru
+                        const newEntry = {
+                            noPo: articleToUpdate.noPo,
+                            tglPo: articleToUpdate.tglPo,
+                            brand: articleToUpdate.brand,
+                            artikel: articleToUpdate.artikel,
+                            qtyPo: articleToUpdate.qtyPo,
+                            color: inputColor,
+                            size: inputSize,
+                            arrivals: {
+                                [arrivalDate]: {
+                                    online: parseInt(formArrival.online) || 0,
+                                    offline: parseInt(formArrival.offline) || 0
+                                }
+                            },
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        };
+                        await db.collection(collectionPath).add(newEntry);
+                    }
+
+                    setIsArrivalModalOpen(false);
+                    setFormArrival({ ...formArrival, color: '', size: '', online: 0, offline: 0 });
+                } catch (err) {
+                    console.error("Arrival Update Error:", err);
+                }
+            };
+
+            const handleExportCSV = () => {
+                if (articles.length === 0) return;
+                let csvContent = "NO PO,TGL PO,BRAND,ARTIKEL,COLOR,SIZE,QTY PO,ONLINE,OFFLINE,TOTAL,SISA\n";
+                articles.forEach(art => {
+                    const m = calculateMetrics(art);
+                    const balance = art.qtyPo - m.total;
+                    const row = [
+                        art.noPo, art.tglPo || '', art.brand, art.artikel, art.color, art.size, art.qtyPo,
+                        m.online, m.offline, m.total, balance
+                    ].map(val => `"${val}"`).join(",");
+                    csvContent += row + "\n";
+                });
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `Rekap_Inventory_${new Date().toLocaleDateString()}.csv`;
+                link.click();
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-50 p-4 md:p-6 font-sans text-slate-900">
+                    <div className="max-w-[98vw] mx-auto">
+                        
+                        {/* HEADER */}
+                        <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                                <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg text-white">
+                                    <Icon name="package-check" size={28} />
+                                </div>
+                                <div>
+                                    <h1 className="text-2xl font-black uppercase tracking-tight leading-none mb-1 text-slate-800">Inventory Tracker 2026</h1>
+                                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em]">PT. NAD INTI DISTRIBUSI (Live Cloud Sync)</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-3">
+                                {isLoading && <div className="animate-spin text-indigo-600 mr-2"><Icon name="loader-2" size={18}/></div>}
+                                
+                                <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                                    <button onClick={() => setView('dashboard')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-indigo-600'}`}>Kalender</button>
+                                    <button onClick={() => setView('recap')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-indigo-600'}`}>Rekap</button>
+                                </div>
+
+                                <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                    <button onClick={prevMonth} className="p-2 hover:bg-slate-50 border-r border-slate-200 text-slate-400"><Icon name="chevron-left" size={16}/></button>
+                                    <div className="px-4 py-2 font-black text-slate-700 min-w-[140px] text-center uppercase text-[10px] tracking-widest">
+                                        {currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+                                    </div>
+                                    <button onClick={nextMonth} className="p-2 hover:bg-slate-50 border-l border-slate-200 text-slate-400"><Icon name="chevron-right" size={16}/></button>
+                                </div>
+
+                                <button onClick={handleExportCSV} className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2.5 rounded-xl font-black hover:bg-emerald-100 transition-all text-[10px] uppercase tracking-widest shadow-sm">
+                                    <Icon name="file-text" size={14} /> Export CSV
+                                </button>
+
+                                <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-white border-2 border-slate-800 text-slate-800 px-4 py-2.5 rounded-xl font-black hover:bg-slate-50 transition-all text-[10px] uppercase tracking-widest">
+                                    <Icon name="plus" size={14} /> Artikel Master
+                                </button>
+                                <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-[10px] uppercase tracking-widest">
+                                    <Icon name="truck" size={14} /> Kedatangan
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* FILTERS */}
+                        <div className="mb-6 flex flex-wrap items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+                            <div className="flex items-center gap-2 px-3 border-r border-slate-100 text-slate-500 font-black uppercase text-[10px]">
+                                <Icon name="filter" size={16} className="text-indigo-600" /> Filter :
+                            </div>
+                            <select className="bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase px-4 py-2 rounded-xl text-slate-600 min-w-[150px]" value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}>
+                                <option value="">Semua Brand</option>
+                                {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                            <select className="bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase px-4 py-2 rounded-xl text-slate-600 min-w-[150px]" value={filterPo} onChange={(e) => setFilterPo(e.target.value)}>
+                                <option value="">Semua No. PO</option>
+                                {uniquePos.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                            <div className="flex-1 min-w-[200px] relative">
+                                <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input placeholder="CARI ARTIKEL..." className="w-full bg-slate-50 border border-slate-100 text-[10px] font-bold uppercase pl-10 pr-4 py-2 rounded-xl text-slate-600 outline-none focus:border-indigo-300" value={filterArtikel} onChange={(e) => setFilterArtikel(e.target.value)} />
+                            </div>
+                        </div>
+
+                        {/* DATA TABLE */}
+                        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-fade-in relative">
+                            {isLoading && (
+                                <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-50 flex items-center justify-center">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <div className="animate-spin text-indigo-600"><Icon name="loader-2" size={40}/></div>
+                                        <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Memuat Data...</span>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="overflow-x-auto max-h-[70vh]">
+                                <table className="w-full border-collapse text-[10px]">
+                                    <thead className="sticky top-0 z-30 shadow-sm">
+                                        <tr className="bg-slate-800 text-white">
+                                            <th rowSpan="3" className="w-20 border border-slate-700 p-3 uppercase bg-slate-900 sticky top-0">Aksi</th>
+                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase sticky-po bg-slate-800">No. PO</th>
+                                            <th rowSpan="3" className="w-28 border border-slate-700 p-3 uppercase bg-slate-800">Tgl PO</th>
+                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase bg-slate-800">Brand</th>
+                                            <th rowSpan="3" className="w-40 border border-slate-700 p-3 uppercase bg-slate-800">Artikel</th>
+                                            <th rowSpan="3" className="w-32 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Color</th>
+                                            <th rowSpan="3" className="w-16 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Size</th>
+                                            <th rowSpan="3" className="w-20 border border-slate-700 p-3 uppercase bg-slate-800 text-center">Qty PO</th>
+                                            
+                                            {view === 'dashboard' ? (
+                                                <th colSpan={daysInMonth.length * 2} className="border border-slate-700 p-2 text-center bg-slate-900 tracking-widest uppercase italic font-bold">Monitoring Kedatangan</th>
+                                            ) : (
+                                                <>
+                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-indigo-900">Online</th>
+                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-amber-900">Offline</th>
+                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-emerald-800 font-black">Total</th>
+                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-rose-900">Sisa</th>
+                                                    <th rowSpan="3" className="border border-slate-700 p-3 text-center uppercase bg-slate-900 w-16">%</th>
+                                                </>
+                                            )}
+                                        </tr>
+                                        {view === 'dashboard' && (
+                                            <>
+                                                <tr className="bg-slate-100 text-slate-700 font-black">
+                                                    {daysInMonth.map(date => <th key={date.toISOString()} colSpan="2" className="border border-slate-200 p-1 text-center min-w-[60px]">{date.getDate()}</th>)}
+                                                </tr>
+                                                <tr className="bg-slate-50 uppercase font-black text-[9px]">
+                                                    {daysInMonth.map(date => (
+                                                        <React.Fragment key={`sub-${date.toISOString()}`}>
+                                                            <th className="border border-slate-200 p-1 text-center text-indigo-600 bg-indigo-50/30">ON</th>
+                                                            <th className="border border-slate-200 p-1 text-center text-amber-600 bg-amber-50/30">OFF</th>
+                                                        </React.Fragment>
+                                                    ))}
+                                                </tr>
+                                            </>
+                                        )}
+                                    </thead>
+                                    <tbody>
+                                        {filteredArticles.length > 0 ? filteredArticles.map((art) => {
+                                            const m = calculateMetrics(art);
+                                            const balance = art.qtyPo - m.total;
+                                            return (
+                                                <tr key={art.id} className="table-row-hover transition-colors">
+                                                    <td className="border border-slate-200 p-2 text-center">
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            <button onClick={() => { setEditData(art); setIsEditModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Icon name="edit-3" size={13}/></button>
+                                                            <button onClick={() => handleDeleteArticle(art.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Icon name="trash-2" size={13}/></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="border border-slate-200 p-3 font-bold text-slate-500 text-center sticky-po">{art.noPo}</td>
+                                                    <td className="border border-slate-200 p-3 font-medium text-slate-500 text-center">{art.tglPo || '-'}</td>
+                                                    <td className="border border-slate-200 p-3 font-bold uppercase">{art.brand}</td>
+                                                    <td className="border border-slate-200 p-3 font-medium uppercase">{art.artikel}</td>
+                                                    <td className="border border-slate-200 p-3 text-center uppercase font-bold text-slate-400">{art.color}</td>
+                                                    <td className="border border-slate-200 p-3 text-center font-black">{art.size}</td>
+                                                    <td className="border border-slate-200 p-3 text-center font-bold bg-slate-50">{art.qtyPo}</td>
+                                                    
+                                                    {view === 'dashboard' ? (
+                                                        daysInMonth.map(date => {
+                                                            const key = toLocalDateString(date);
+                                                            const d = (art.arrivals && art.arrivals[key]) || { online: 0, offline: 0 };
+                                                            return (
+                                                                <React.Fragment key={`${art.id}-${key}`}>
+                                                                    <td className="border border-slate-100 p-1 text-center font-bold text-indigo-600">{d.online || '-'}</td>
+                                                                    <td className="border border-slate-100 p-1 text-center font-bold text-amber-600">{d.offline || '-'}</td>
+                                                                </React.Fragment>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <>
+                                                            <td className="border border-slate-200 p-3 text-center text-indigo-700 bg-indigo-50/20">{m.online}</td>
+                                                            <td className="border border-slate-200 p-3 text-center text-amber-700 bg-amber-50/20">{m.offline}</td>
+                                                            <td className="border border-slate-200 p-3 text-center bg-emerald-50 text-emerald-800 font-black">{m.total}</td>
+                                                            <td className={`border border-slate-200 p-3 text-center font-black ${balance > 0 ? 'text-rose-600 bg-rose-50' : 'text-emerald-600'}`}>{balance}</td>
+                                                            <td className="border border-slate-200 p-3 text-center font-black">
+                                                                <span className={`px-2 py-1 rounded-md ${m.percentage >= 100 ? 'bg-emerald-100 text-emerald-700' : m.percentage > 50 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                                    {m.percentage.toFixed(1)}%
+                                                                </span>
+                                                            </td>
+                                                        </>
+                                                    )}
+                                                </tr>
+                                            );
+                                        }) : (
+                                            <tr>
+                                                <td colSpan="100" className="p-10 text-center text-slate-400 font-bold uppercase tracking-widest italic">Belum ada data artikel.</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* MODAL MASTER ARTIKEL */}
+                    {isModalOpen && (
+                        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden animate-fade-in">
+                                <div className="bg-indigo-600 p-6 text-white flex justify-between items-center">
+                                    <h3 className="text-xl font-black uppercase tracking-tight">Daftarkan Artikel Master</h3>
+                                    <button onClick={() => setIsModalOpen(false)}><Icon name="x" size={24} /></button>
+                                </div>
+                                <div className="p-8 grid grid-cols-2 gap-5">
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">No. PO</label>
+                                        <input placeholder="PO-XXXX" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value})} />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal PO</label>
+                                        <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" value={formArticle.tglPo} onChange={e => setFormArticle({...formArticle, tglPo: e.target.value})} />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Brand</label>
+                                        <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={formArticle.brand} onChange={e => setFormArticle({...formArticle, brand: e.target.value})}>
+                                            <option value="">-- PILIH BRAND --</option>
+                                            {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Artikel</label>
+                                        <input placeholder="NAMA ARTIKEL" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold uppercase" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value})} />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Qty Target PO</label>
+                                        <input type="number" className="w-full p-4 bg-emerald-50 border border-emerald-100 rounded-2xl font-black text-emerald-700" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
+                                    </div>
+                                    <div className="col-span-2 flex gap-4 mt-4">
+                                        <button onClick={() => setIsModalOpen(false)} className="flex-1 p-4 bg-slate-100 rounded-2xl font-black text-slate-400 uppercase text-[10px]">Batal</button>
+                                        <button onClick={handleSaveArticle} className="flex-1 p-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Simpan</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL ARRIVAL */}
+                    {isArrivalModalOpen && (
+                        <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+                                <div className="p-6 border-b flex justify-between items-center text-indigo-600">
+                                    <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><Icon name="truck" /> Detail Kedatangan</h3>
+                                    <button onClick={() => setIsArrivalModalOpen(false)}><Icon name="x" size={20} /></button>
+                                </div>
+                                <div className="p-8 space-y-4">
+                                    <div>
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Pilih Artikel Master</label>
+                                        <select className="w-full p-4 bg-indigo-50 border border-indigo-100 rounded-2xl font-black text-indigo-700 text-xs" value={formArrival.targetPo} onChange={e => setFormArrival({...formArrival, targetPo: e.target.value})}>
+                                            <option value="">-- PILIH ARTIKEL --</option>
+                                            {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} | {a.artikel} ({a.brand})</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <SearchableDropdown 
+                                            label="Color"
+                                            options={COLOR_LIST}
+                                            value={formArrival.color}
+                                            onChange={(val) => setFormArrival({...formArrival, color: val})}
+                                            placeholder="CARI WARNA..."
+                                        />
+
+                                        <SearchableDropdown 
+                                            label="Size"
+                                            options={SIZE_LIST}
+                                            value={formArrival.size}
+                                            onChange={(val) => setFormArrival({...formArrival, size: val})}
+                                            placeholder="CARI SIZE..."
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal Kedatangan</label>
+                                        <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold text-xs" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[9px] font-black uppercase text-indigo-400 ml-2 mb-1 block text-center">Online</label>
+                                            <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-indigo-50 rounded-2xl font-black text-indigo-600 text-center" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black uppercase text-amber-400 ml-2 mb-1 block text-center">Offline</label>
+                                            <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-amber-50 rounded-2xl font-black text-amber-600 text-center" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
+                                        </div>
+                                    </div>
+                                    
+                                    <button onClick={handleUpdateArrival} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest mt-6 shadow-lg flex items-center justify-center gap-2">
+                                        <Icon name="check-circle" size={16} /> Simpan Kedatangan
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL EDIT */}
+                    {isEditModalOpen && (
+                        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+                            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden animate-fade-in">
+                                <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
+                                    <h3 className="text-xl font-black uppercase tracking-tight">Edit Detail Artikel</h3>
+                                    <button onClick={() => setIsEditModalOpen(false)}><Icon name="x" size={24} /></button>
+                                </div>
+                                <div className="p-8 grid grid-cols-2 gap-5">
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">No. PO</label>
+                                        <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.noPo} onChange={e => setEditData({...editData, noPo: e.target.value})} />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Brand</label>
+                                        <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.brand} onChange={e => setEditData({...editData, brand: e.target.value})}>
+                                            {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Artikel</label>
+                                        <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.artikel} onChange={e => setEditData({...editData, artikel: e.target.value})} />
+                                    </div>
+                                    <div className="col-span-1 text-xs">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Color</label>
+                                        <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.color} onChange={e => setEditData({...editData, color: e.target.value})} />
+                                    </div>
+                                    <div className="col-span-1 text-xs">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Size</label>
+                                        <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.size} onChange={e => setEditData({...editData, size: e.target.value})} />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1">Qty Target PO</label>
+                                        <input type="number" className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" value={editData.qtyPo} onChange={e => setEditData({...editData, qtyPo: e.target.value})} />
+                                    </div>
+                                    <div className="col-span-2 flex gap-4 mt-6">
+                                        <button onClick={() => setIsEditModalOpen(false)} className="flex-1 p-4 bg-slate-100 rounded-2xl font-black text-slate-400 uppercase text-[10px]">Batal</button>
+                                        <button onClick={handleUpdateArticle} className="flex-1 p-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Update</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
