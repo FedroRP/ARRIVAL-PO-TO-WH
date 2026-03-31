@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Tracker 2026 - PT. NAD INTI DISTRIBUS</title>
+    <title>Inventory Tracker 2026 - PT. NAD INTI DISTRIBUSI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -20,7 +20,6 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
         
-        /* Custom styles for filter inputs in header */
         .header-filter-input {
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
@@ -111,14 +110,8 @@
             const [currentDate, setCurrentDate] = useState(new Date());
             const [articles, setArticles] = useState([]);
             
-            // Filter state
             const [columnFilters, setColumnFilters] = useState({
-                noPo: '',
-                brand: '',
-                artikel: '',
-                color: '',
-                size: '',
-                rangePengiriman: ''
+                noPo: '', brand: '', artikel: '', color: '', size: '', rangePengiriman: ''
             });
 
             const [isModalOpen, setIsModalOpen] = useState(false);
@@ -186,7 +179,6 @@
                 return { online, offline, total, sisa, rangePengiriman };
             };
 
-            // Enhanced filtering logic
             const filteredArticles = useMemo(() => {
                 return articles.filter(art => {
                     const m = calculateMetrics(art);
@@ -196,10 +188,22 @@
                     const matchColor = columnFilters.color === '' || art.color === columnFilters.color;
                     const matchSize = columnFilters.size === '' || art.size === columnFilters.size;
                     const matchRange = m.rangePengiriman?.toUpperCase().includes(columnFilters.rangePengiriman.toUpperCase());
-                    
                     return matchNoPo && matchBrand && matchArtikel && matchColor && matchSize && matchRange;
                 });
             }, [articles, columnFilters]);
+
+            const isFiltering = useMemo(() => {
+                return Object.values(columnFilters).some(v => v !== '');
+            }, [columnFilters]);
+
+            const grandTotals = useMemo(() => {
+                return filteredArticles.reduce((acc, art) => {
+                    const m = calculateMetrics(art);
+                    acc.qtyPo += (parseInt(art.qtyPo) || 0);
+                    acc.totalTerima += m.total;
+                    return acc;
+                }, { qtyPo: 0, totalTerima: 0 });
+            }, [filteredArticles]);
 
             const daysInMonth = useMemo(() => {
                 const year = currentDate.getFullYear();
@@ -254,18 +258,64 @@
             };
 
             const handleUpdateArrival = () => {
-                const updated = articles.map(art => {
-                    if (art.id === formArrival.targetId) {
-                        const newArrivals = { ...art.arrivals };
-                        const key = formArrival.date;
-                        newArrivals[key] = {
-                            online: (parseInt(newArrivals[key]?.online) || 0) + (parseInt(formArrival.online) || 0),
-                            offline: (parseInt(newArrivals[key]?.offline) || 0) + (parseInt(formArrival.offline) || 0)
+                const targetArt = articles.find(a => a.id === formArrival.targetId);
+                if (!targetArt) return;
+
+                let updated;
+
+                const isInitialEntry = targetArt.color === '-' && targetArt.size === '-';
+                const isMatchingCombo = targetArt.color === formArrival.color && targetArt.size === formArrival.size;
+
+                if (isInitialEntry || isMatchingCombo) {
+                    updated = articles.map(art => {
+                        if (art.id === formArrival.targetId) {
+                            const newArrivals = { ...art.arrivals };
+                            const key = formArrival.date;
+                            newArrivals[key] = {
+                                online: (parseInt(newArrivals[key]?.online) || 0) + (parseInt(formArrival.online) || 0),
+                                offline: (parseInt(newArrivals[key]?.offline) || 0) + (parseInt(formArrival.offline) || 0)
+                            };
+                            return { ...art, color: formArrival.color, size: formArrival.size, arrivals: newArrivals };
+                        }
+                        return art;
+                    });
+                } else {
+                    const existingComboRow = articles.find(a => 
+                        a.noPo === targetArt.noPo && 
+                        a.color === formArrival.color && 
+                        a.size === formArrival.size
+                    );
+
+                    if (existingComboRow) {
+                        updated = articles.map(art => {
+                            if (art.id === existingComboRow.id) {
+                                const newArrivals = { ...art.arrivals };
+                                const key = formArrival.date;
+                                newArrivals[key] = {
+                                    online: (parseInt(newArrivals[key]?.online) || 0) + (parseInt(formArrival.online) || 0),
+                                    offline: (parseInt(newArrivals[key]?.offline) || 0) + (parseInt(formArrival.offline) || 0)
+                                };
+                                return { ...art, arrivals: newArrivals };
+                            }
+                            return art;
+                        });
+                    } else {
+                        const newEntry = {
+                            ...targetArt,
+                            id: Date.now().toString(),
+                            color: formArrival.color,
+                            size: formArrival.size,
+                            arrivals: {
+                                [formArrival.date]: {
+                                    online: parseInt(formArrival.online) || 0,
+                                    offline: parseInt(formArrival.offline) || 0
+                                }
+                            }
                         };
-                        return { ...art, color: formArrival.color, size: formArrival.size, arrivals: newArrivals };
+                        updated = [...articles, newEntry];
                     }
-                    return art;
-                });
+                }
+
                 setArticles(updated);
                 syncToSheets(updated);
                 setIsArrivalModalOpen(false);
@@ -274,119 +324,32 @@
 
             const exportToCSV = () => {
                 const headers = "NOMOR PO,TANGGAL PENGIRIMAN,BRAND,ARTIKEL,COLOR,SIZE,QTY PO,TOTAL ON,TOTAL OFF,TOTAL TERIMA,SISA PO";
-                
                 const rows = filteredArticles.map(art => {
                     const m = calculateMetrics(art);
-                    return [
-                        `"${art.noPo}"`,
-                        `"${m.rangePengiriman}"`,
-                        `"${art.brand}"`,
-                        `"${art.artikel}"`,
-                        `"${art.color}"`,
-                        `"${art.size}"`,
-                        art.qtyPo,
-                        m.online,
-                        m.offline,
-                        m.total,
-                        m.sisa
-                    ].join(",");
+                    return [`"${art.noPo}"`, `"${m.rangePengiriman}"`, `"${art.brand}"`, `"${art.artikel}"`, `"${art.color}"`, `"${art.size}"`, art.qtyPo, m.online, m.offline, m.total, m.sisa].join(",");
                 });
-
                 const blob = new Blob([headers + "\n" + rows.join("\n")], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.setAttribute("href", url);
-                link.setAttribute("download", `Recap_Inventory_2026.csv`);
+                link.setAttribute("download", "Recap_Inventory_2026.csv");
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
             };
 
-            const renderTableRows = () => {
-                return filteredArticles.map(art => {
-                    const m = calculateMetrics(art);
-                    
-                    if (view === 'dashboard') {
-                        return (
-                            <tr key={art.id} className="table-row-hover group">
-                                <td className="p-2 border border-slate-50 sticky-action group-hover:bg-slate-50">
-                                    <div className="flex gap-1 justify-center">
-                                        <button onClick={() => handleEdit(art)} className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Icon name="edit-3" size={14}/></button>
-                                        <button onClick={() => handleDelete(art.id)} className="p-2 text-rose-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Icon name="trash-2" size={14}/></button>
-                                    </div>
-                                </td>
-                                <td className="p-5 border border-slate-50 sticky-po group-hover:bg-slate-50 uppercase font-black text-slate-900">{art.noPo}</td>
-                                <td className="p-5 border border-slate-50 uppercase text-slate-500">{art.brand}</td>
-                                <td className="p-5 border border-slate-50 uppercase text-left text-slate-800">{art.artikel}</td>
-                                <td className="p-5 border border-slate-50 uppercase text-slate-400">{art.color}</td>
-                                <td className="p-5 border border-slate-50">{art.size}</td>
-                                <td className="p-5 border border-slate-50 font-black bg-indigo-50/30 text-indigo-700">{art.qtyPo}</td>
-                                {daysInMonth.map(date => {
-                                    const dStr = toLocalDateString(date);
-                                    const val = art.arrivals?.[dStr] || { online: 0, offline: 0 };
-                                    return (
-                                        <React.Fragment key={`${art.id}-${dStr}`}>
-                                            <td className={`p-2 border border-slate-50 font-bold ${val.online ? 'bg-indigo-50/50 text-indigo-600' : 'text-slate-200'}`}>{val.online || 0}</td>
-                                            <td className={`p-2 border border-slate-50 font-bold ${val.offline ? 'bg-amber-50/50 text-amber-600' : 'text-slate-200'}`}>{val.offline || 0}</td>
-                                        </React.Fragment>
-                                    );
-                                })}
-                            </tr>
-                        );
-                    } else {
-                        // Recap View
-                        return (
-                            <tr key={art.id} className="table-row-hover group">
-                                <td className="p-2 border border-slate-50 sticky-action group-hover:bg-slate-50">
-                                    <div className="flex gap-1 justify-center">
-                                        <button onClick={() => handleEdit(art)} className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Icon name="edit-3" size={14}/></button>
-                                        <button onClick={() => handleDelete(art.id)} className="p-2 text-rose-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Icon name="trash-2" size={14}/></button>
-                                    </div>
-                                </td>
-                                <td className="p-5 border border-slate-50 sticky-po group-hover:bg-slate-50 uppercase font-black text-slate-900">{art.noPo}</td>
-                                <td className="p-5 border border-slate-50 text-indigo-600 font-black bg-indigo-50/20 text-xs min-w-[200px]">{m.rangePengiriman}</td>
-                                <td className="p-5 border border-slate-50 uppercase text-slate-500">{art.brand}</td>
-                                <td className="p-5 border border-slate-50 uppercase text-left text-slate-800">{art.artikel}</td>
-                                <td className="p-5 border border-slate-50 uppercase text-slate-400">{art.color}</td>
-                                <td className="p-5 border border-slate-50">{art.size}</td>
-                                <td className="p-5 border border-slate-50 font-black bg-slate-50 text-slate-400">{art.qtyPo}</td>
-                                <td className="p-5 border border-slate-50 text-indigo-600 font-bold">{m.online}</td>
-                                <td className="p-5 border border-slate-50 text-amber-600 font-bold">{m.offline}</td>
-                                <td className="p-5 border border-slate-50 bg-emerald-50 text-emerald-700 font-black">{m.total}</td>
-                                <td className={`p-5 border border-slate-50 font-black ${m.sisa > 0 ? 'text-rose-600 bg-rose-50' : 'text-emerald-500'}`}>{m.sisa}</td>
-                            </tr>
-                        );
-                    }
-                });
-            };
-
-            const handleFilterChange = (column, value) => {
-                setColumnFilters(prev => ({ ...prev, [column]: value }));
-            };
-
-            const clearFilters = () => {
-                setColumnFilters({
-                    noPo: '',
-                    brand: '',
-                    artikel: '',
-                    color: '',
-                    size: '',
-                    rangePengiriman: ''
-                });
-            };
+            const clearFilters = () => setColumnFilters({ noPo: '', brand: '', artikel: '', color: '', size: '', rangePengiriman: '' });
 
             return (
                 <div className="min-h-screen p-4 md:p-10">
                     <div className="max-w-[98vw] mx-auto">
-                        
-                        {/* Header Section */}
                         <div className="mb-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
                             <div className="flex items-center gap-6">
                                 <div className="bg-indigo-600 p-5 rounded-[2.2rem] shadow-2xl text-white transform hover:rotate-6 transition-transform">
                                     <Icon name="package" size={36} />
                                 </div>
                                 <div>
-                                    <h1 className="text-4xl font-black uppercase tracking-tighter text-slate-900 leading-none">REKAP KEDATANGAN ARTIKEL</h1>
+                                    <h1 className="text-4xl font-black uppercase tracking-tighter text-slate-900 leading-none">Inventory Cloud 2026</h1>
                                     <div className="flex items-center gap-2 mt-2">
                                         <span className={`w-2 h-2 rounded-full ${dbStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-amber-500 animate-pulse'}`}></span>
                                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">
@@ -404,80 +367,31 @@
                                     </span>
                                     <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white rounded-lg transition-all text-slate-400 hover:text-indigo-600"><Icon name="chevron-right" size={16}/></button>
                                 </div>
-
                                 <div className="h-8 w-[1px] bg-slate-200 mx-1"></div>
-
                                 <button onClick={() => setView('dashboard')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:bg-slate-50'}`}>Timeline</button>
                                 <button onClick={() => setView('recap')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${view === 'recap' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:bg-slate-50'}`}>Recap Summary</button>
-                                
-                                <button onClick={exportToCSV} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100">
-                                    <Icon name="download" size={16} /> Export Recap CSV
-                                </button>
+                                <button onClick={exportToCSV} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100"><Icon name="download" size={16} /> Export CSV</button>
                             </div>
 
                             <div className="flex gap-4">
-                                <button onClick={() => { setEditMode(false); setIsModalOpen(true); }} className="flex items-center gap-2 bg-white border-2 border-slate-900 text-slate-900 px-7 py-4 rounded-2xl font-black text-xs uppercase hover:bg-slate-900 hover:text-white transition-all shadow-md">
-                                    <Icon name="plus" size={16} /> Master PO
-                                </button>
-                                <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-7 py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 text-xs uppercase hover:bg-indigo-700 transition-all">
-                                    <Icon name="truck" size={16} /> Kedatangan
-                                </button>
+                                <button onClick={() => { setEditMode(false); setIsModalOpen(true); }} className="flex items-center gap-2 bg-white border-2 border-slate-900 text-slate-900 px-7 py-4 rounded-2xl font-black text-xs uppercase hover:bg-slate-900 hover:text-white transition-all shadow-md"><Icon name="plus" size={16} /> Master PO</button>
+                                <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-7 py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 text-xs uppercase hover:bg-indigo-700 transition-all"><Icon name="truck" size={16} /> Kedatangan</button>
                             </div>
                         </div>
 
-                        {/* Inventory Table */}
-                        <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden animate-fade-in">
+                        {/* Main Table Container */}
+                        <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden animate-fade-in mb-10">
                             <div className="overflow-x-auto max-h-[72vh]">
                                 <table className="w-full border-collapse text-[11px] font-bold">
                                     <thead className="sticky top-0 z-30">
                                         <tr className="bg-slate-900 text-white uppercase tracking-tighter">
-                                            <th rowSpan="3" className="p-3 border border-slate-800 sticky-action bg-slate-900 w-[60px]">
-                                                Aksi
-                                                <button onClick={clearFilters} className="block mx-auto mt-2 p-1 bg-white/10 hover:bg-white/20 rounded transition-all" title="Bersihkan Filter">
-                                                    <Icon name="filter-x" size={12}/>
-                                                </button>
-                                            </th>
-                                            <th rowSpan="3" className="p-5 border border-slate-800 sticky-po bg-slate-900 min-w-[120px]">
-                                                Nomor PO
-                                                <div className="mt-2"><input className="header-filter-input" placeholder="Filter..." value={columnFilters.noPo} onChange={e => handleFilterChange('noPo', e.target.value)}/></div>
-                                            </th>
-                                            {view === 'recap' && (
-                                                <th rowSpan="3" className="p-5 border border-slate-800 bg-indigo-900 min-w-[210px]">
-                                                    Tanggal Pengiriman
-                                                    <div className="mt-2"><input className="header-filter-input" placeholder="Cari Tanggal..." value={columnFilters.rangePengiriman} onChange={e => handleFilterChange('rangePengiriman', e.target.value)}/></div>
-                                                </th>
-                                            )}
-                                            <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 min-w-[120px]">
-                                                Brand
-                                                <div className="mt-2">
-                                                    <select className="header-filter-input" value={columnFilters.brand} onChange={e => handleFilterChange('brand', e.target.value)}>
-                                                        <option value="">SEMUA</option>
-                                                        {BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}
-                                                    </select>
-                                                </div>
-                                            </th>
-                                            <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 text-left min-w-[180px]">
-                                                Artikel
-                                                <div className="mt-2"><input className="header-filter-input" placeholder="Cari Artikel..." value={columnFilters.artikel} onChange={e => handleFilterChange('artikel', e.target.value)}/></div>
-                                            </th>
-                                            <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 min-w-[110px]">
-                                                Color
-                                                <div className="mt-2">
-                                                    <select className="header-filter-input" value={columnFilters.color} onChange={e => handleFilterChange('color', e.target.value)}>
-                                                        <option value="">SEMUA</option>
-                                                        {COLOR_LIST.map(c => <option key={c} value={c}>{c}</option>)}
-                                                    </select>
-                                                </div>
-                                            </th>
-                                            <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 min-w-[60px]">
-                                                Size
-                                                <div className="mt-2">
-                                                    <select className="header-filter-input" value={columnFilters.size} onChange={e => handleFilterChange('size', e.target.value)}>
-                                                        <option value="">ALL</option>
-                                                        {SIZE_LIST.map(s => <option key={s} value={s}>{s}</option>)}
-                                                    </select>
-                                                </div>
-                                            </th>
+                                            <th rowSpan="3" className="p-3 border border-slate-800 sticky-action bg-slate-900 w-[60px]">Aksi <button onClick={clearFilters} className="block mx-auto mt-2 p-1 bg-white/10 hover:bg-white/20 rounded transition-all" title="Bersihkan Filter"><Icon name="filter-x" size={12}/></button></th>
+                                            <th rowSpan="3" className="p-5 border border-slate-800 sticky-po bg-slate-900 min-w-[120px]">Nomor PO <div className="mt-2"><input className="header-filter-input" placeholder="Cari..." value={columnFilters.noPo} onChange={e => setColumnFilters({...columnFilters, noPo: e.target.value})}/></div></th>
+                                            {view === 'recap' && <th rowSpan="3" className="p-5 border border-slate-800 bg-indigo-900 min-w-[210px]">Tanggal Pengiriman <div className="mt-2"><input className="header-filter-input" placeholder="Tgl..." value={columnFilters.rangePengiriman} onChange={e => setColumnFilters({...columnFilters, rangePengiriman: e.target.value})}/></div></th>}
+                                            <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 min-w-[120px]">Brand <div className="mt-2"><select className="header-filter-input" value={columnFilters.brand} onChange={e => setColumnFilters({...columnFilters, brand: e.target.value})}><option value="">SEMUA</option>{BRAND_LIST.map(b => <option key={b} value={b}>{b}</option>)}</select></div></th>
+                                            <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 text-left min-w-[180px]">Artikel <div className="mt-2"><input className="header-filter-input" placeholder="Cari..." value={columnFilters.artikel} onChange={e => setColumnFilters({...columnFilters, artikel: e.target.value})}/></div></th>
+                                            <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 min-w-[110px]">Color <div className="mt-2"><select className="header-filter-input" value={columnFilters.color} onChange={e => setColumnFilters({...columnFilters, color: e.target.value})}><option value="">SEMUA</option>{COLOR_LIST.map(c => <option key={c} value={c}>{c}</option>)}</select></div></th>
+                                            <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 min-w-[60px]">Size <div className="mt-2"><select className="header-filter-input" value={columnFilters.size} onChange={e => setColumnFilters({...columnFilters, size: e.target.value})}><option value="">ALL</option>{SIZE_LIST.map(s => <option key={s} value={s}>{s}</option>)}</select></div></th>
                                             <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 text-indigo-300 min-w-[80px]">Qty PO</th>
                                             {view === 'dashboard' ? (
                                                 <th colSpan={daysInMonth.length * 2} className="border border-slate-800 p-2 text-center bg-slate-950">Arus Kedatangan Barang</th>
@@ -507,19 +421,101 @@
                                         )}
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 text-center">
-                                        {renderTableRows()}
-                                        {filteredArticles.length === 0 && (
-                                            <tr>
-                                                <td colSpan="100%" className="p-10 text-slate-400 italic font-medium">Data tidak ditemukan dengan kriteria filter tersebut.</td>
-                                            </tr>
-                                        )}
+                                        {filteredArticles.map(art => {
+                                            const m = calculateMetrics(art);
+                                            return (
+                                                <tr key={art.id} className="table-row-hover group">
+                                                    <td className="p-2 border border-slate-50 sticky-action group-hover:bg-slate-50">
+                                                        <div className="flex gap-1 justify-center">
+                                                            <button onClick={() => handleEdit(art)} className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Icon name="edit-3" size={14}/></button>
+                                                            <button onClick={() => handleDelete(art.id)} className="p-2 text-rose-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Icon name="trash-2" size={14}/></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-5 border border-slate-50 sticky-po group-hover:bg-slate-50 uppercase font-black text-slate-900">{art.noPo}</td>
+                                                    {view === 'recap' && <td className="p-5 border border-slate-50 text-indigo-600 font-black bg-indigo-50/20 text-xs min-w-[200px]">{m.rangePengiriman}</td>}
+                                                    <td className="p-5 border border-slate-50 uppercase text-slate-500">{art.brand}</td>
+                                                    <td className="p-5 border border-slate-50 uppercase text-left text-slate-800">{art.artikel}</td>
+                                                    <td className="p-5 border border-slate-50 uppercase text-slate-400">{art.color}</td>
+                                                    <td className="p-5 border border-slate-50">{art.size}</td>
+                                                    <td className={`p-5 border border-slate-50 font-black ${view === 'dashboard' ? 'bg-indigo-50/30 text-indigo-700' : 'bg-slate-50 text-slate-400'}`}>{art.qtyPo}</td>
+                                                    {view === 'dashboard' ? (
+                                                        daysInMonth.map(date => {
+                                                            const dStr = toLocalDateString(date);
+                                                            const val = art.arrivals?.[dStr] || { online: 0, offline: 0 };
+                                                            return (
+                                                                <React.Fragment key={`${art.id}-${dStr}`}>
+                                                                    <td className={`p-2 border border-slate-50 font-bold ${val.online ? 'bg-indigo-50/50 text-indigo-600' : 'text-slate-200'}`}>{val.online || 0}</td>
+                                                                    <td className={`p-2 border border-slate-50 font-bold ${val.offline ? 'bg-amber-50/50 text-amber-600' : 'text-slate-200'}`}>{val.offline || 0}</td>
+                                                                </React.Fragment>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <>
+                                                            <td className="p-5 border border-slate-50 text-indigo-600 font-bold">{m.online}</td>
+                                                            <td className="p-5 border border-slate-50 text-amber-600 font-bold">{m.offline}</td>
+                                                            <td className="p-5 border border-slate-50 bg-emerald-50 text-emerald-700 font-black">{m.total}</td>
+                                                            <td className={`p-5 border border-slate-50 font-black ${m.sisa > 0 ? 'text-rose-600 bg-rose-50' : 'text-emerald-500'}`}>{m.sisa}</td>
+                                                        </>
+                                                    )}
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
                         </div>
+
+                        {/* Summary Filter Table (Only visible when filtering) */}
+                        {isFiltering && (
+                            <div className="bg-indigo-900 rounded-[2rem] shadow-2xl p-8 text-white animate-fade-in mb-10 overflow-hidden border-4 border-indigo-500/30">
+                                <div className="flex items-center gap-4 mb-6 border-b border-indigo-400/30 pb-4">
+                                    <div className="bg-white/10 p-3 rounded-xl"><Icon name="list-checks" size={24}/></div>
+                                    <div>
+                                        <h2 className="text-xl font-black uppercase tracking-tight">Summary Filter Result</h2>
+                                        <p className="text-indigo-200 text-[10px] font-bold uppercase tracking-widest">Akumulasi Data Berdasarkan Filter Aktif</p>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-[11px] text-center">
+                                        <thead>
+                                            <tr className="bg-white/10 text-indigo-200 uppercase font-black tracking-tighter">
+                                                <th className="p-4 rounded-l-xl">No. PO</th>
+                                                <th className="p-4 text-left">Artikel</th>
+                                                <th className="p-4">Color</th>
+                                                <th className="p-4">Size</th>
+                                                <th className="p-4 text-indigo-300">Qty PO</th>
+                                                <th className="p-4 text-emerald-400 rounded-r-xl">Total Terima</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5 font-bold">
+                                            {filteredArticles.map(art => {
+                                                const m = calculateMetrics(art);
+                                                return (
+                                                    <tr key={`sum-${art.id}`} className="hover:bg-white/5 transition-colors">
+                                                        <td className="p-4">{art.noPo}</td>
+                                                        <td className="p-4 text-left uppercase text-indigo-100">{art.artikel}</td>
+                                                        <td className="p-4 text-indigo-300">{art.color}</td>
+                                                        <td className="p-4">{art.size}</td>
+                                                        <td className="p-4 text-white font-black">{art.qtyPo}</td>
+                                                        <td className="p-4 text-emerald-300 font-black">{m.total}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="bg-white/10 text-white border-t-2 border-indigo-400">
+                                                <td colSpan="4" className="p-5 text-right font-black uppercase tracking-widest text-sm rounded-l-xl">Grand Total</td>
+                                                <td className="p-5 font-black text-xl text-indigo-300">{grandTotals.qtyPo}</td>
+                                                <td className="p-5 font-black text-xl text-emerald-400 rounded-r-xl">{grandTotals.totalTerima}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Master PO Modal */}
+                    {/* Modals... (Sama seperti sebelumnya) */}
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fade-in">
                             <div className="bg-white rounded-[2.8rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
@@ -528,28 +524,16 @@
                                     <button onClick={() => { setIsModalOpen(false); setEditMode(false); }} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all"><Icon name="x" size={24} /></button>
                                 </div>
                                 <div className="p-8 space-y-6">
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Nomor PO</label>
-                                        <input placeholder="Contoh: PO-001" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value.toUpperCase()})} />
-                                    </div>
+                                    <div><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Nomor PO</label><input placeholder="Contoh: PO-001" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.noPo} onChange={e => setFormArticle({...formArticle, noPo: e.target.value.toUpperCase()})} /></div>
                                     <SearchableDropdown label="Pilih Brand" options={BRAND_LIST} value={formArticle.brand} onChange={v => setFormArticle({...formArticle, brand: v})} placeholder="CARI BRAND..." />
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Nama Artikel</label>
-                                        <input placeholder="Contoh: KEMEJA POLOS" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value.toUpperCase()})} />
-                                    </div>
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Quantity Target PO</label>
-                                        <input type="number" placeholder="0" className="w-full p-5 bg-indigo-50 border-2 border-indigo-100 focus:border-indigo-500 rounded-2xl font-black text-3xl text-indigo-700 outline-none transition-all text-center" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} />
-                                    </div>
-                                    <button onClick={handleSaveArticle} className="w-full py-5 bg-indigo-600 text-white rounded-[1.8rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">
-                                        {editMode ? 'Simpan Perubahan Cloud' : 'Kirim ke Database Cloud'}
-                                    </button>
+                                    <div><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Nama Artikel</label><input placeholder="Contoh: KEMEJA POLOS" className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl font-black uppercase outline-none transition-all" value={formArticle.artikel} onChange={e => setFormArticle({...formArticle, artikel: e.target.value.toUpperCase()})} /></div>
+                                    <div><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Quantity Target PO</label><input type="number" placeholder="0" className="w-full p-5 bg-indigo-50 border-2 border-indigo-100 focus:border-indigo-500 rounded-2xl font-black text-3xl text-indigo-700 outline-none transition-all text-center" value={formArticle.qtyPo || ''} onChange={e => setFormArticle({...formArticle, qtyPo: parseInt(e.target.value) || 0})} /></div>
+                                    <button onClick={handleSaveArticle} className="w-full py-5 bg-indigo-600 text-white rounded-[1.8rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">{editMode ? 'Simpan Perubahan Cloud' : 'Kirim ke Database Cloud'}</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Arrival Modal */}
                     {isArrivalModalOpen && (
                         <div className="fixed inset-0 bg-indigo-950/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fade-in">
                             <div className="bg-white rounded-[2.8rem] shadow-2xl w-full max-w-md overflow-hidden">
@@ -559,33 +543,22 @@
                                 </div>
                                 <div className="p-8 space-y-5">
                                     <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Pilih Artikel PO</label>
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Pilih Artikel PO (Pilih SKU Yang Sesuai)</label>
                                         <select className="w-full p-4 bg-slate-50 border rounded-2xl font-black text-xs outline-none cursor-pointer" value={formArrival.targetId} onChange={e => setFormArrival({...formArrival, targetId: e.target.value})}>
                                             <option value="">-- PILIH DATA PO --</option>
-                                            {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} - {a.artikel}</option>)}
+                                            {articles.map(a => <option key={a.id} value={a.id}>{a.noPo} - {a.artikel} ({a.color}/{a.size})</option>)}
                                         </select>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <SearchableDropdown label="Warna" options={COLOR_LIST} value={formArrival.color} onChange={v => setFormArrival({...formArrival, color: v})} placeholder="WARNA" />
                                         <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="SIZE" />
                                     </div>
-                                    <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal Kedatangan</label>
-                                        <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-black outline-none" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
-                                    </div>
+                                    <div><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal Kedatangan</label><input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-black outline-none" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} /></div>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] font-black uppercase text-indigo-500 ml-2 mb-2 block text-center">Qty Online</label>
-                                            <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-indigo-100 rounded-2xl font-black text-center text-xl text-indigo-600 outline-none" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-black uppercase text-amber-500 ml-2 mb-2 block text-center">Qty Offline</label>
-                                            <input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-amber-100 rounded-2xl font-black text-center text-xl text-amber-600 outline-none" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} />
-                                        </div>
+                                        <div><label className="text-[10px] font-black uppercase text-indigo-500 ml-2 mb-2 block text-center">Qty Online</label><input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-indigo-100 rounded-2xl font-black text-center text-xl text-indigo-600 outline-none" value={formArrival.online || ''} onChange={e => setFormArrival({...formArrival, online: e.target.value})} /></div>
+                                        <div><label className="text-[10px] font-black uppercase text-amber-500 ml-2 mb-2 block text-center">Qty Offline</label><input type="number" placeholder="0" className="w-full p-4 bg-white border-2 border-amber-100 rounded-2xl font-black text-center text-xl text-amber-600 outline-none" value={formArrival.offline || ''} onChange={e => setFormArrival({...formArrival, offline: e.target.value})} /></div>
                                     </div>
-                                    <button onClick={handleUpdateArrival} className="w-full py-5 bg-indigo-600 text-white rounded-[1.8rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">
-                                        Update Kedatangan Cloud
-                                    </button>
+                                    <button onClick={handleUpdateArrival} className="w-full py-5 bg-indigo-600 text-white rounded-[1.8rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">Update Kedatangan Cloud</button>
                                 </div>
                             </div>
                         </div>
