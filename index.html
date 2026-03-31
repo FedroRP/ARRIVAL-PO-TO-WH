@@ -214,7 +214,7 @@
 
             const exportToCSV = () => {
                 // Header untuk export rinci: Total Baris diganti menjadi TOTAL
-                const headers = "NOMOR PO,TGL DATANG,BRAND,ARTIKEL,COLOR,SIZE,QTY PO,ON,OFF,TOTAL,SISA PO";
+                const headers = "NOMOR PO,TGL PO,BRAND,ARTIKEL,COLOR,SIZE,QTY PO,ON,OFF,TOTAL,SISA PO";
                 
                 let rows = [];
                 articles.forEach(art => {
@@ -386,7 +386,7 @@
                                         <tr className="bg-slate-900 text-white uppercase tracking-tighter">
                                             <th rowSpan="3" className="p-3 border border-slate-800 sticky-action bg-slate-900 w-[60px]">Aksi</th>
                                             <th rowSpan="3" className="p-5 border border-slate-800 sticky-po bg-slate-900 min-w-[120px]">Nomor PO</th>
-                                            {view === 'recap' && <th rowSpan="3" className="p-5 border border-slate-800 bg-indigo-900 min-w-[110px]">Tgl Datang</th>}
+                                            {view === 'recap' && <th rowSpan="3" className="p-5 border border-slate-800 bg-indigo-900 min-w-[110px]">Tgl PO</th>}
                                             <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 min-w-[120px]">Brand</th>
                                             <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 text-left min-w-[180px]">Artikel</th>
                                             <th rowSpan="3" className="p-5 border border-slate-800 bg-slate-900 min-w-[110px]">Color</th>
@@ -478,7 +478,7 @@
                                         <SearchableDropdown label="Size" options={SIZE_LIST} value={formArrival.size} onChange={v => setFormArrival({...formArrival, size: v})} placeholder="SIZE" />
                                     </div>
                                     <div>
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal Kedatangan</label>
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Tanggal PO</label>
                                         <input type="date" className="w-full p-4 bg-slate-50 border rounded-2xl font-black outline-none" value={formArrival.date} onChange={e => setFormArrival({...formArrival, date: e.target.value})} />
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
@@ -492,7 +492,7 @@
                                         </div>
                                     </div>
                                     <button onClick={handleUpdateArrival} className="w-full py-5 bg-indigo-600 text-white rounded-[1.8rem] font-black uppercase text-xs mt-4 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">
-                                        Update Kedatangan Cloud
+                                        Update Kedatangan
                                     </button>
                                 </div>
                             </div>
