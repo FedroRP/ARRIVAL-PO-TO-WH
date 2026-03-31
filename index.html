@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Tracker 2026 - PT. NAD INTI DISTRIBUSI</title>
+    <title>Inventory Tracker - PT. NAD INTI DISTRIBUSI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -243,10 +243,16 @@
             };
 
             const handleEdit = (art) => {
-                setEditMode(true);
-                setSelectedId(art.id);
-                setFormArticle({ noPo: art.noPo, brand: art.brand, artikel: art.artikel, qtyPo: art.qtyPo });
-                setIsModalOpen(true);
+                // Membuka modal Kedatangan dengan data awal dari baris yang dipilih
+                setFormArrival({
+                    targetId: art.id,
+                    date: toLocalDateString(new Date()),
+                    color: art.color === '-' ? '' : art.color,
+                    size: art.size === '-' ? '' : art.size,
+                    online: 0,
+                    offline: 0
+                });
+                setIsArrivalModalOpen(true);
             };
 
             const handleDelete = (id) => {
@@ -349,7 +355,7 @@
                                     <Icon name="package" size={36} />
                                 </div>
                                 <div>
-                                    <h1 className="text-4xl font-black uppercase tracking-tighter text-slate-900 leading-none">Inventory Cloud 2026</h1>
+                                    <h1 className="text-4xl font-black uppercase tracking-tighter text-slate-900 leading-none">Inventory Tracker - PT. NAD INTI DISTRIBUSI</h1>
                                     <div className="flex items-center gap-2 mt-2">
                                         <span className={`w-2 h-2 rounded-full ${dbStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-amber-500 animate-pulse'}`}></span>
                                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">
@@ -375,7 +381,7 @@
 
                             <div className="flex gap-4">
                                 <button onClick={() => { setEditMode(false); setIsModalOpen(true); }} className="flex items-center gap-2 bg-white border-2 border-slate-900 text-slate-900 px-7 py-4 rounded-2xl font-black text-xs uppercase hover:bg-slate-900 hover:text-white transition-all shadow-md"><Icon name="plus" size={16} /> Master PO</button>
-                                <button onClick={() => setIsArrivalModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-7 py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 text-xs uppercase hover:bg-indigo-700 transition-all"><Icon name="truck" size={16} /> Kedatangan</button>
+                                <button onClick={() => { setFormArrival({ targetId: '', date: toLocalDateString(new Date()), color: '', size: '', online: 0, offline: 0 }); setIsArrivalModalOpen(true); }} className="flex items-center gap-2 bg-indigo-600 text-white px-7 py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 text-xs uppercase hover:bg-indigo-700 transition-all"><Icon name="truck" size={16} /> Kedatangan</button>
                             </div>
                         </div>
 
@@ -465,7 +471,7 @@
                             </div>
                         </div>
 
-                        {/* Summary Filter Table (Only visible when filtering) */}
+                        {/* Summary Filter Table */}
                         {isFiltering && (
                             <div className="bg-indigo-900 rounded-[2rem] shadow-2xl p-8 text-white animate-fade-in mb-10 overflow-hidden border-4 border-indigo-500/30">
                                 <div className="flex items-center gap-4 mb-6 border-b border-indigo-400/30 pb-4">
@@ -515,7 +521,7 @@
                         )}
                     </div>
 
-                    {/* Modals... (Sama seperti sebelumnya) */}
+                    {/* Modal Master PO */}
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fade-in">
                             <div className="bg-white rounded-[2.8rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
@@ -534,6 +540,7 @@
                         </div>
                     )}
 
+                    {/* Modal Kedatangan */}
                     {isArrivalModalOpen && (
                         <div className="fixed inset-0 bg-indigo-950/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fade-in">
                             <div className="bg-white rounded-[2.8rem] shadow-2xl w-full max-w-md overflow-hidden">
